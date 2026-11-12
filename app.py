@@ -36,7 +36,7 @@ def cargar_estado():
         "fase": "configuracion",
         "meta_puntos": 200,
         "jugadores": [],
-        "jornadas": {}, # {"1": {"mesas": {...}, "resultados": {...}}}
+        "jornadas": {},
         "jornada_actual": 1,
     }
     if os.path.exists(ARCHIVO_ESTADO):
@@ -187,7 +187,7 @@ def calcular_ranking_general(estado):
     return lista
 
 # -----------------------------------------------------------------------------
-# 4. FASE DE CONFIGURACION E INSCRIPCION
+# 4. FASE DE CONFIGURACION E INSCRIPCION (ORDEN ALFABETICO)
 # -----------------------------------------------------------------------------
 if estado["fase"] == "configuracion":
     st.title("Torneo Liga - Inscripción de Atletas")
@@ -202,6 +202,7 @@ if estado["fase"] == "configuracion":
             n = nuevo.strip()
             if n and n.upper() not in [x.upper() for x in estado["jugadores"]]:
                 estado["jugadores"].append(n)
+                estado["jugadores"].sort(key=lambda x: x.lower()) # Orden alfabético automático
                 guardar_estado(estado)
                 st.success(f"Atleta {n} inscrito.")
                 st.rerun()
@@ -225,7 +226,7 @@ if estado["fase"] == "configuracion":
             st.rerun()
 
 # -----------------------------------------------------------------------------
-# 5. FASE DE LIGA Y JORNADAS (6 RONDAS)
+# 5. FASE DE LIGA Y JORNADAS (6 RONDAS DIRECTAS)
 # -----------------------------------------------------------------------------
 elif estado["fase"] == "liga":
     st.title("Torneo Liga - Desarrollo")
@@ -252,7 +253,6 @@ elif estado["fase"] == "liga":
         jugs = list(estado["jugadores"])
         num_mesas = len(jugs) // 4
         
-        # Generar estructura para las 6 rondas
         for r in range(1, 7):
             r_key = f"ronda_{r}"
             mesas_dict = {}
@@ -277,23 +277,24 @@ elif estado["fase"] == "liga":
         st.dataframe(rk_gen, use_container_width=True)
 
     st.markdown("---")
-    st.subheader(f"Carga de Resultados - Jornada {j_act} (6 Rondas)")
+    st.subheader(f"Carga de Resultados - Jornada {j_act} (Las 6 Rondas)")
     
     rondas_dict = estado["jornadas"][j_str]["rondas"]
-    ronda_sel = st.selectbox("Seleccione la Ronda a Cargar:", list(rondas_dict.keys()))
     
-    if ronda_sel:
-        mesas = rondas_dict[ronda_sel]
-        for m_key, m_val in mesas.items():
-            pA = m_val["pareja_A"]
-            pB = m_val["pareja_B"]
-            with st.expander(f"[{ronda_sel.upper()}] Mesa {m_key}: ({pA[0]} & {pA[1]}) vs ({pB[0]} & {pB[1]})", expanded=True):
-                col_a, col_b = st.columns(2)
+    # Mostrar todas las rondas de forma limpia y directa
+    for r_key, mesas in rondas_dict.items():
+        with st.expander(f"📌 {r_key.upper().replace('_', ' ')}", expanded=(r_key == "ronda_1")):
+            for m_key, m_val in mesas.items():
+                pA = m_val["pareja_A"]
+                pB = m_val["pareja_B"]
+                col_m, col_a, col_b = st.columns([2, 1, 1])
+                with col_m:
+                    st.markdown(f"**Mesa {m_key.split('_')[1]}**<br>({pA[0]} & {pA[1]}) vs ({pB[0]} & {pB[1]})", unsafe_allow_html=True)
                 with col_a:
-                    pa = st.number_input(f"Puntos Pareja A ({m_key})", 0, estado["meta_puntos"], int(m_val["pts_A"]), key=f"pa_{j_act}_{ronda_sel}_{m_key}")
+                    pa = st.number_input(f"Pts A ({r_key}_{m_key})", 0, estado["meta_puntos"], int(m_val["pts_A"]), key=f"pa_{j_act}_{r_key}_{m_key}")
                 with col_b:
-                    pb = st.number_input(f"Puntos Pareja B ({m_key})", 0, estado["meta_puntos"], int(m_val["pts_B"]), key=f"pb_{j_act}_{ronda_sel}_{m_key}")
+                    pb = st.number_input(f"Pts B ({r_key}_{m_key})", 0, estado["meta_puntos"], int(m_val["pts_B"]), key=f"pb_{j_act}_{r_key}_{m_key}")
                 
-                estado["jornadas"][j_str]["rondas"][ronda_sel][m_key]["pts_A"] = pa
-                estado["jornadas"][j_str]["rondas"][ronda_sel][m_key]["pts_B"] = pb
+                estado["jornadas"][j_str]["rondas"][r_key][m_key]["pts_A"] = pa
+                estado["jornadas"][j_str]["rondas"][r_key][m_key]["pts_B"] = pb
                 guardar_estado(estado)
