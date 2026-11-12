@@ -70,6 +70,7 @@ with st.sidebar:
 def calcular_ranking_jornada(jornada_data):
     stats = {}
     rondas = jornada_data.get("rondas", {})
+    meta = jornada_data.get("meta_puntos", 200)
     
     for r_key, contenido in rondas.items():
         mesas = contenido.get("mesas", {})
@@ -103,12 +104,10 @@ def calcular_ranking_jornada(jornada_data):
                     else:
                         stats[j]["JP"] += 1
                         
-        # Procesar BYE si existe en la ronda
         bye_list = contenido.get("bye", [])
         for j in bye_list:
             if j not in stats:
                 stats[j] = {"JJ": 0, "JG": 0, "JP": 0, "P+": 0, "P-": 0}
-            meta = jornada_data.get("meta_puntos", 200)
             pts_fav = meta
             pts_con = meta // 2
             stats[j]["JJ"] += 1
@@ -217,7 +216,7 @@ def calcular_ranking_general(estado):
     return lista
 
 # -----------------------------------------------------------------------------
-# 4. FASE DE CONFIGURACION E INSCRIPCION
+# 4. FASE DE CONFIGURACION E INSCRIPCION (VALIDACION DE DUPLICADOS Y ORDEN)
 # -----------------------------------------------------------------------------
 if estado["fase"] == "configuracion":
     st.title("Torneo Liga - Inscripción de Atletas")
@@ -230,12 +229,19 @@ if estado["fase"] == "configuracion":
         nuevo = st.text_input("Nombre del Atleta:")
         if st.form_submit_button("Inscribir Atleta"):
             n = nuevo.strip()
-            if n and n.upper() not in [x.upper() for x in estado["jugadores"]]:
-                estado["jugadores"].append(n)
-                estado["jugadores"].sort(key=lambda x: x.lower())
-                guardar_estado(estado)
-                st.success(f"Atleta {n} inscrito.")
-                st.rerun()
+            if n:
+                # Validar duplicados sin importar mayúsculas/minúsculas
+                existentes_lower = [x.lower() for x in estado["jugadores"]]
+                if n.lower() in existentes_lower:
+                    st.error(f"El atleta '{n}' ya está inscrito en la lista.")
+                else:
+                    estado["jugadores"].append(n)
+                    estado["jugadores"].sort(key=lambda x: x.lower())
+                    guardar_estado(estado)
+                    st.success(f"Atleta {n} inscrito correctamente.")
+                    st.rerun()
+            else:
+                st.warning("Ingrese un nombre válido.")
                 
     st.markdown(f"### Atletas Inscritos ({len(estado['jugadores'])})")
     for idx, jug in enumerate(estado["jugadores"]):
@@ -248,7 +254,7 @@ if estado["fase"] == "configuracion":
             
     if st.button("Iniciar Primera Jornada (6 Rondas)", type="primary", use_container_width=True):
         if len(estado["jugadores"]) < 4:
-            st.warning("Se requieren al menos 4 atletas.")
+            st.warning("Se requieren al menos 4 atletas inscritos.")
         else:
             estado["fase"] = "liga"
             estado["jornada_actual"] = 1
@@ -256,7 +262,7 @@ if estado["fase"] == "configuracion":
             st.rerun()
 
 # -----------------------------------------------------------------------------
-# 5. FASE DE LIGA (SISTEMA SUIZO Y RESTRICCIONES)
+# 5. FASE DE LIGA (SISTEMA SUIZO Y RONDA 1 AL AZAR)
 # -----------------------------------------------------------------------------
 elif estado["fase"] == "liga":
     st.title("Torneo Liga - Desarrollo")
@@ -283,10 +289,9 @@ elif estado["fase"] == "liga":
     
     jornada_actual_dict = estado["jornadas"][j_str]
     rondas_dict = jornada_actual_dict["rondas"]
-    
     jugs = list(estado["jugadores"])
     
-    # Generar las 6 rondas aplicando Sistema Suizo y restricciones de no repetición absoluta
+    # Generar las 6 rondas
     for r in range(1, 7):
         r_key = f"ronda_{r}"
         if r_key not in rondas_dict:
@@ -294,28 +299,25 @@ elif estado["fase"] == "liga":
             bye_list = []
             
             if r == 1:
-                # Ronda 1: Orden inicial
-                lista_activa = list(jugs)
-                random.shuffle(lista_activa) # O por orden de lista
+                # Ronda 1: Sorteo al azar estricto
+                lista_azar = list(jugs)
+                random.shuffle(lista_azar)
                 
-                # Manejar imparidad en ronda 1 si aplica
-                if len(lista_activa) % 4 != 0 and len(lista_activa) >= 4:
-                    # Sacar jugadores para BYE si sobra gente que no completa mesa de 4
-                    sobrantes = len(lista_activa) % 4
+                if len(lista_azar) % 4 != 0 and len(lista_azar) >= 4:
+                    sobrantes = len(lista_azar) % 4
                     for _ in range(sobrantes):
-                        bye_list.append(lista_activa.pop())
+                        bye_list.append(lista_azar.pop())
                 
-                num_mesas = len(lista_activa) // 4
+                num_mesas = len(lista_azar) // 4
                 for i in range(num_mesas):
                     mesas_dict[f"mesa_{i+1}"] = {
-                        "pareja_A": [lista_activa[i*4], lista_activa[i*4+2]],
-                        "pareja_B": [lista_activa[i*4+1], lista_activa[i*4+3]],
+                        "pareja_A": [lista_azar[i*4], lista_azar[i*4+2]],
+                        "pareja_B": [lista_azar[i*4+1], lista_azar[i*4+3]],
                         "pts_A": 0,
                         "pts_B": 0
                     }
             else:
-                # Rondas 2 a 6: Sistema Suizo basado en ranking parcial de la jornada
-                # Recopilar historial previo de esta misma jornada para evitar repeticiones
+                # Rondas 2 a 6: Sistema Suizo y no repetición absoluta
                 historial_parejas = set()
                 historial_enfrentamientos = set()
                 historial_byes = set()
@@ -328,23 +330,18 @@ elif estado["fase"] == "liga":
                             pB = tuple(sorted(m_d.get("pareja_B", [])))
                             if len(pA) == 2: historial_parejas.add(pA)
                             if len(pB) == 2: historial_parejas.add(pB)
-                            # Registrar enfrentamientos de parejas o jugadores
                             historial_enfrentamientos.add((pA, pB))
                             historial_enfrentamientos.add((pB, pA))
                         for b_j in rondas_dict[prev_key].get("bye", []):
                             historial_byes.add(b_j)
                 
-                # Obtener ranking parcial de la jornada para ordenar por puntos
                 rk_parcial = calcular_ranking_jornada(jornada_actual_dict)
                 orden_suizo = [x["nombre"] for x in rk_parcial if x["nombre"] in jugs]
-                # Asegurar que entren todos por si acaso
                 for j in jugs:
                     if j not in orden_suizo:
                         orden_suizo.append(j)
                 
-                # Asignar BYE a quien no haya tenido BYE y esté más abajo (o rotando)
                 if len(orden_suizo) % 4 != 0:
-                    # Buscar candidato que no haya estado en historial_byes
                     candidato_bye = None
                     for j in reversed(orden_suizo):
                         if j not in historial_byes:
@@ -357,16 +354,12 @@ elif estado["fase"] == "liga":
                         bye_list.append(candidato_bye)
                         orden_suizo.remove(candidato_bye)
                 
-                # Emparejar mesas de 4 intentando respetar el orden suizo y evitando repetir parejas/rivales
-                # Algoritmo heurístico estricto de no repetición
                 disponibles = list(orden_suizo)
                 num_mesas = len(disponibles) // 4
                 mesa_idx = 1
                 
                 while len(disponibles) >= 4 and mesa_idx <= num_mesas:
-                    # Tomar al líder disponible
                     p1 = disponibles.pop(0)
-                    # Buscar pareja ideal para p1 que no haya jugado antes con él
                     p2 = None
                     for idx_c, c in enumerate(disponibles):
                         par_candidata = tuple(sorted([p1, c]))
@@ -377,7 +370,6 @@ elif estado["fase"] == "liga":
                     if not p2:
                         p2 = disponibles.pop(0)
                         
-                    # Buscar rivales (pareja B) que no hayan jugado contra (p1, p2)
                     p3, p4 = None, None
                     encontrado_rivales = False
                     for i in range(len(disponibles)):
@@ -423,7 +415,7 @@ elif estado["fase"] == "liga":
         st.dataframe(rk_gen, use_container_width=True)
 
     st.markdown("---")
-    st.subheader(f"Carga de Resultados - Jornada {j_act} (Las 6 Rondas - Sistema Suizo)")
+    st.subheader(f"Carga de Resultados - Jornada {j_act} (Las 6 Rondas)")
     
     meta_actual = jornada_actual_dict.get("meta_puntos", 200)
     
@@ -437,7 +429,7 @@ elif estado["fase"] == "liga":
             
         with st.expander(titulo_ronda, expanded=(r_key == "ronda_1")):
             if bye_arr:
-                st.info(f"Atletas en BYE automático en esta ronda (Ganan {meta_actual} a {meta_actual//2}): **{', '.join(bye_arr)}**")
+                st.info(f"Atletas en BYE automático (Ganan {meta_actual} a {meta_actual//2}): **{', '.join(bye_arr)}**")
                 
             for m_key, m_val in mesas.items():
                 pA = m_val["pareja_A"]
