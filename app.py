@@ -22,6 +22,19 @@ if not st.session_state.autenticado:
             st.error("Clave incorrecta. Intente nuevamente.")
     st.stop()
 
-# Siguiente paso
-st.title("Panel Principal")
-st.success("Acceso concedido correctamente.")
+# -----------------------------------------------------------------------------
+# PUERTA PRINCIPAL
+# -----------------------------------------------------------------------------
+st.title("Torneo Liga")
+st.markdown("*Sistema creado por Franz Lameda*")
+st.markdown("### Seleccione una opción")
+
+col1, col2 = st.columns(2)
+with col1:
+    if st.button("TORNEOS", use_container_width=True):
+        st.session_state.vista = "torneos"
+        st.rerun()
+with col2:
+    if st.button("NUEVO TORNEO", type="primary", use_container_width=True):
+        st.session_state.vista = "nuevo_torneo"
+        st.rerun()
