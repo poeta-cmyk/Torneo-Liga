@@ -17,6 +17,8 @@ if "torneos" not in st.session_state:
     st.session_state.torneos = {}
 if "torneo_actual" not in st.session_state:
     st.session_state.torneo_actual = None
+if "torneo_a_eliminar" not in st.session_state:
+    st.session_state.torneo_a_eliminar = None
 
 # -----------------------------------------------------------------------------
 # 2. PANTALLA DE CLAVE
@@ -45,6 +47,7 @@ if st.session_state.vista == "puerta":
     col1, col2 = st.columns(2)
     with col1:
         if st.button("TORNEOS", use_container_width=True):
+            st.session_state.torneo_a_eliminar = None
             st.session_state.vista = "lista_torneos"
             st.rerun()
     with col2:
@@ -81,6 +84,10 @@ elif st.session_state.vista == "crear_torneo":
 elif st.session_state.vista == "inscribir_atletas":
     t_actual = st.session_state.torneo_actual
     st.title(f"Torneo: {t_actual}")
+    if st.button("⬅ Volver al Inicio"):
+        st.session_state.vista = "puerta"
+        st.rerun()
+
     st.markdown("### Inscripción de Atletas")
 
     with st.form("form_agregar_atleta", clear_on_submit=True):
@@ -108,19 +115,50 @@ elif st.session_state.vista == "inscribir_atletas":
             st.rerun()
 
 # -----------------------------------------------------------------------------
-# 6. LISTA DE TORNEOS GUARDADOS
+# 6. LISTA DE TORNEOS GUARDADOS (CON ELIMINACION PROTEGIDA POR CLAVE)
 # -----------------------------------------------------------------------------
 elif st.session_state.vista == "lista_torneos":
     st.title("Torneos Guardados")
     if st.button("⬅ Volver al Inicio"):
+        st.session_state.torneo_a_eliminar = None
         st.session_state.vista = "puerta"
         st.rerun()
 
     if not st.session_state.torneos:
         st.info("Aún no hay torneos creados.")
     else:
-        for nombre in st.session_state.torneos.keys():
-            if st.button(f"Abrir: {nombre}", use_container_width=True):
-                st.session_state.torneo_actual = nombre
-                st.session_state.vista = "inscribir_atletas"
-                st.rerun()
+        for nombre in list(st.session_state.torneos.keys()):
+            col_abrir, col_borrar = st.columns([4, 1])
+            with col_abrir:
+                if st.button(f"📂 Abrir: {nombre}", key=f"abrir_{nombre}", use_container_width=True):
+                    st.session_state.torneo_actual = nombre
+                    st.session_state.vista = "inscribir_atletas"
+                    st.rerun()
+            with col_borrar:
+                if st.button("🗑️ Eliminar Torneo", key=f"req_del_{nombre}", use_container_width=True):
+                    st.session_state.torneo_a_eliminar = nombre
+                    st.rerun()
+
+        # Aviso de emergencia y solicitud de clave si se presionó Eliminar Torneo
+        if st.session_state.torneo_a_eliminar:
+            t_del = st.session_state.torneo_a_eliminar
+            st.markdown("---")
+            st.warning(f"⚠️ **AVISO DE SEGURIDAD:** Está a punto de eliminar permanentemente el torneo **'{t_del}'**. Introduzca su clave para proceder.")
+            clave_confirm = st.text_input("Clave de autorización:", type="password", key="clave_borrar_torneo")
+            
+            c_conf, c_canc = st.columns(2)
+            with c_conf:
+                if st.button("Confirmar Eliminación", type="primary", use_container_width=True):
+                    if clave_confirm == CLAVE_ACCESO:
+                        del st.session_state.torneos[t_del]
+                        if st.session_state.torneo_actual == t_del:
+                            st.session_state.torneo_actual = None
+                        st.session_state.torneo_a_eliminar = None
+                        st.success(f"Torneo '{t_del}' eliminado correctamente.")
+                        st.rerun()
+                    else:
+                        st.error("Clave incorrecta. No se eliminó el torneo.")
+            with c_canc:
+                if st.button("Cancelar", use_container_width=True):
+                    st.session_state.torneo_a_eliminar = None
+                    st.rerun()
