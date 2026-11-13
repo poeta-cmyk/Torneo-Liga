@@ -17,6 +17,8 @@ if "torneos" not in st.session_state:
     st.session_state.torneos = {}
 if "torneo_actual" not in st.session_state:
     st.session_state.torneo_actual = None
+if "modalidad_temp" not in st.session_state:
+    st.session_state.modalidad_temp = None
 if "torneo_a_eliminar" not in st.session_state:
     st.session_state.torneo_a_eliminar = None
 
@@ -52,20 +54,49 @@ if st.session_state.vista == "puerta":
             st.rerun()
     with col2:
         if st.button("NUEVO TORNEO", type="primary", use_container_width=True):
-            st.session_state.vista = "crear_torneo"
+            st.session_state.vista = "elegir_modalidad"
             st.rerun()
 
 # -----------------------------------------------------------------------------
-# 4. CREAR TORNEO (PEDIR NOMBRE)
+# 4. ELEGIR MODALIDAD (RELAMPAGO vs DE LIGA)
 # -----------------------------------------------------------------------------
-elif st.session_state.vista == "crear_torneo":
+elif st.session_state.vista == "elegir_modalidad":
     st.title("Nuevo Torneo")
     if st.button("⬅ Volver al Inicio"):
         st.session_state.vista = "puerta"
         st.rerun()
 
+    st.markdown("### Seleccione la modalidad del torneo")
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("⚡ TORNEO RELÁMPAGO", use_container_width=True):
+            st.session_state.modalidad_temp = "Relámpago"
+            st.session_state.vista = "crear_torneo"
+            st.rerun()
+    with col2:
+        if st.button("🏆 TORNEO DE LIGA", type="primary", use_container_width=True):
+            st.session_state.modalidad_temp = "De Liga"
+            st.session_state.vista = "crear_torneo"
+            st.rerun()
+
+# -----------------------------------------------------------------------------
+# 5. CONFIGURAR TORNEO (NOMBRE, META Y RONDAS)
+# -----------------------------------------------------------------------------
+elif st.session_state.vista == "crear_torneo":
+    mod = st.session_state.modalidad_temp
+    st.title(f"Nuevo Torneo ({mod})")
+    if st.button("⬅ Cambiar Modalidad"):
+        st.session_state.vista = "elegir_modalidad"
+        st.rerun()
+
     with st.form("form_nuevo_torneo"):
         nombre_torneo = st.text_input("Nombre del Torneo:")
+        col_m, col_r = st.columns(2)
+        with col_m:
+            meta_puntos = st.selectbox("Marcador de Meta:", [100, 200], index=1)
+        with col_r:
+            cant_rondas = st.selectbox("Cantidad de Rondas:", [5, 6, 7, 8, 9], index=1)
+
         if st.form_submit_button("Crear y Pasar a Inscripción", type="primary"):
             n_t = nombre_torneo.strip()
             if not n_t:
@@ -73,17 +104,26 @@ elif st.session_state.vista == "crear_torneo":
             elif n_t.lower() in [k.lower() for k in st.session_state.torneos.keys()]:
                 st.error(f"Ya existe un torneo llamado '{n_t}'.")
             else:
-                st.session_state.torneos[n_t] = {"atletas": []}
+                st.session_state.torneos[n_t] = {
+                    "modalidad": mod,
+                    "meta": meta_puntos,
+                    "rondas": cant_rondas,
+                    "atletas": [],
+                }
                 st.session_state.torneo_actual = n_t
                 st.session_state.vista = "inscribir_atletas"
                 st.rerun()
 
 # -----------------------------------------------------------------------------
-# 5. AGREGAR ATLETAS AL TORNEO
+# 6. AGREGAR ATLETAS AL TORNEO
 # -----------------------------------------------------------------------------
 elif st.session_state.vista == "inscribir_atletas":
     t_actual = st.session_state.torneo_actual
-    st.title(f"Torneo: {t_actual}")
+    datos_t = st.session_state.torneos[t_actual]
+    
+    st.title(f"{t_actual}")
+    st.caption(f"Modalidad: {datos_t['modalidad']} | Meta: {datos_t['meta']} pts | Rondas: {datos_t['rondas']}")
+    
     if st.button("⬅ Volver al Inicio"):
         st.session_state.vista = "puerta"
         st.rerun()
@@ -94,7 +134,7 @@ elif st.session_state.vista == "inscribir_atletas":
         nuevo_atleta = st.text_input("Nombre del Atleta:")
         if st.form_submit_button("Agregar Atleta"):
             n_a = nuevo_atleta.strip()
-            lista_actual = st.session_state.torneos[t_actual]["atletas"]
+            lista_actual = datos_t["atletas"]
             if not n_a:
                 st.warning("Ingrese un nombre válido.")
             elif n_a.lower() in [x.lower() for x in lista_actual]:
@@ -105,7 +145,7 @@ elif st.session_state.vista == "inscribir_atletas":
                 st.success(f"Atleta '{n_a}' agregado.")
                 st.rerun()
 
-    atletas = st.session_state.torneos[t_actual]["atletas"]
+    atletas = datos_t["atletas"]
     st.markdown(f"**Atletas Inscritos ({len(atletas)}):**")
     for idx, atleta in enumerate(atletas):
         c1, c2 = st.columns([6, 1])
@@ -115,7 +155,7 @@ elif st.session_state.vista == "inscribir_atletas":
             st.rerun()
 
 # -----------------------------------------------------------------------------
-# 6. LISTA DE TORNEOS GUARDADOS (CON ELIMINACION PROTEGIDA POR CLAVE)
+# 7. LISTA DE TORNEOS GUARDADOS (CON ELIMINACION PROTEGIDA POR CLAVE)
 # -----------------------------------------------------------------------------
 elif st.session_state.vista == "lista_torneos":
     st.title("Torneos Guardados")
@@ -127,10 +167,11 @@ elif st.session_state.vista == "lista_torneos":
     if not st.session_state.torneos:
         st.info("Aún no hay torneos creados.")
     else:
-        for nombre in list(st.session_state.torneos.keys()):
+        for nombre, info in list(st.session_state.torneos.items()):
             col_abrir, col_borrar = st.columns([4, 1])
+            etiqueta = f"📂 {nombre} ({info['modalidad']} - {info['meta']} pts - {info['rondas']} rondas)"
             with col_abrir:
-                if st.button(f"📂 Abrir: {nombre}", key=f"abrir_{nombre}", use_container_width=True):
+                if st.button(etiqueta, key=f"abrir_{nombre}", use_container_width=True):
                     st.session_state.torneo_actual = nombre
                     st.session_state.vista = "inscribir_atletas"
                     st.rerun()
@@ -139,7 +180,6 @@ elif st.session_state.vista == "lista_torneos":
                     st.session_state.torneo_a_eliminar = nombre
                     st.rerun()
 
-        # Aviso de emergencia y solicitud de clave si se presionó Eliminar Torneo
         if st.session_state.torneo_a_eliminar:
             t_del = st.session_state.torneo_a_eliminar
             st.markdown("---")
