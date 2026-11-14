@@ -43,7 +43,7 @@ if "torneo_a_eliminar" not in st.session_state:
 
 
 # -----------------------------------------------------------------------------
-# 2. MOTOR DE CALCULO Y RANKING POR TORNEO
+# 2. MOTOR DE CALCULO Y RANKING (MENORES O IGUALES)
 # -----------------------------------------------------------------------------
 def calcular_ranking(datos_t):
     meta = datos_t["meta"]
@@ -111,6 +111,13 @@ def calcular_ranking(datos_t):
             d["PF"] = max(0, d["PF"] - penalizacion)
 
         d["DIF"] = d["PF"] - d["PC"]
+
+        # Si tras la penalización los puntos a favor son menores o iguales a los en contra, pierde
+        total_juegos = d["JG"] + d["JP"]
+        if total_juegos > 0 and d["PF"] <= d["PC"]:
+            d["JG"] = 0
+            d["JP"] = total_juegos
+
         lista_stats.append(d)
 
     lista_stats.sort(
