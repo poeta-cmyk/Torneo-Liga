@@ -1,3 +1,5 @@
+import json
+import os
 import streamlit as st
 
 st.set_page_config(
@@ -5,16 +7,33 @@ st.set_page_config(
 )
 
 CLAVE_ACCESO = "POETA1479"
+ARCHIVO_ESTADO = "torneos_estado.json"
+
 
 # -----------------------------------------------------------------------------
-# 1. INICIALIZACION DE MEMORIA
+# 1. PERSISTENCIA Y CARGA DE DATOS (BLINDAJE CONTRA APAGONES)
 # -----------------------------------------------------------------------------
+def cargar_estado_general():
+    if os.path.exists(ARCHIVO_ESTADO):
+        try:
+            with open(ARCHIVO_ESTADO, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
+
+def guardar_estado_general(torneos):
+    with open(ARCHIVO_ESTADO, "w", encoding="utf-8") as f:
+        json.dump(torneos, f, ensure_ascii=False, indent=4)
+
+
 if "autenticado" not in st.session_state:
     st.session_state.autenticado = False
 if "vista" not in st.session_state:
     st.session_state.vista = "puerta"
 if "torneos" not in st.session_state:
-    st.session_state.torneos = {}
+    st.session_state.torneos = cargar_estado_general()
 if "torneo_actual" not in st.session_state:
     st.session_state.torneo_actual = None
 if "modalidad_temp" not in st.session_state:
@@ -192,8 +211,9 @@ elif st.session_state.vista == "crear_torneo":
                     "amonestaciones": {},
                     "historial_byes": [],
                     "resultados_rondas": {},
-                    "estado_torneo": "inscripcion",
+                    "estado_torneo": "inscribir_atletas",
                 }
+                guardar_estado_general(st.session_state.torneos)
                 st.session_state.torneo_actual = n_t
                 st.session_state.vista = "inscribir_atletas"
                 st.rerun()
@@ -226,6 +246,7 @@ elif st.session_state.vista == "inscribir_atletas":
             else:
                 lista_actual.append(n_a)
                 lista_actual.sort(key=lambda x: x.lower())
+                guardar_estado_general(st.session_state.torneos)
                 st.success(f"Atleta '{n_a}' agregado.")
                 st.rerun()
 
@@ -242,6 +263,7 @@ elif st.session_state.vista == "inscribir_atletas":
     if indices_a_eliminar:
         for idx in reversed(indices_a_eliminar):
             atletas.pop(idx)
+        guardar_estado_general(st.session_state.torneos)
         st.rerun()
 
     st.markdown("---")
@@ -251,6 +273,7 @@ elif st.session_state.vista == "inscribir_atletas":
         else:
             datos_t["estado_torneo"] = "rondas"
             datos_t["ronda_actual"] = 1
+            guardar_estado_general(st.session_state.torneos)
             st.session_state.vista = "rondas"
             st.rerun()
 
@@ -261,7 +284,6 @@ elif st.session_state.vista == "rondas":
     t_actual = st.session_state.torneo_actual
     datos_t = st.session_state.torneos[t_actual]
     
-    # Asegurar llaves críticas si el torneo viene de guardados anteriores
     if "resultados_rondas" not in datos_t:
         datos_t["resultados_rondas"] = {}
     if "historial_byes" not in datos_t:
@@ -278,10 +300,10 @@ elif st.session_state.vista == "rondas":
     st.title(f"{t_actual} ({datos_t['modalidad']})")
     st.subheader(f"Ronda {ronda} de {datos_t['rondas']}")
 
-    col_ini, col_rank, col_ret, col_amon, col_config = st.columns([1.5, 2, 2, 2, 2])
+    col_ini, col_rank, col_ret, col_amon = st.columns([2, 2, 2, 2])
 
     with col_ini:
-        if st.button("⬅ Inicio", use_container_width=True):
+        if st.button("⬅ Menú Principal", use_container_width=True):
             st.session_state.vista = "puerta"
             st.rerun()
 
@@ -297,14 +319,6 @@ elif st.session_state.vista == "rondas":
         if st.button("Amonestaciones", use_container_width=True):
             st.session_state.ver_amon = not st.session_state.get("ver_amon", False)
 
-    with col_config:
-        if st.button("Reiniciar Rondas", use_container_width=True):
-            datos_t["estado_torneo"] = "inscripcion"
-            datos_t["resultados_rondas"] = {}
-            datos_t["historial_byes"] = []
-            st.session_state.vista = "inscribir_atletas"
-            st.rerun()
-
     if st.session_state.get("ver_ranking", False):
         st.markdown("### Tabla de Posiciones Acumulada")
         st.dataframe(calcular_ranking(datos_t), use_container_width=True)
@@ -318,6 +332,7 @@ elif st.session_state.vista == "rondas":
             if st.button("Retiro Normal (Fin de Ronda)", use_container_width=True):
                 if j_ret_sel not in datos_t["retirados"]:
                     datos_t["retirados"].append(j_ret_sel)
+                    guardar_estado_general(st.session_state.torneos)
                     st.success(f"{j_ret_sel} retirado respetando su puntaje acumulado.")
                     st.rerun()
 
@@ -335,6 +350,7 @@ elif st.session_state.vista == "rondas":
                             elif j_ret_sel in d_m["pareja_B"]:
                                 d_m["pts_A"] = meta
                                 d_m["pts_B"] = 0
+                    guardar_estado_general(st.session_state.torneos)
                     st.error(f"{j_ret_sel} expulsado con marcador 0-{meta}.")
                     st.rerun()
 
@@ -348,6 +364,7 @@ elif st.session_state.vista == "rondas":
 
         if st.button("Aplicar Penalización", use_container_width=True):
             datos_t["amonestaciones"][j_sel] = pts_penal
+            guardar_estado_general(st.session_state.torneos)
             st.success(f"Penalización de {j_sel} establecida en {pts_penal} puntos.")
             st.rerun()
 
@@ -389,6 +406,7 @@ elif st.session_state.vista == "rondas":
 
         datos_t["resultados_rondas"][r_str]["mesas"] = mesas_generadas
         datos_t["resultados_rondas"][r_str]["byes"] = jugadores_bye
+        guardar_estado_general(st.session_state.torneos)
 
     mesas_guardadas = datos_t["resultados_rondas"][r_str]["mesas"]
     jugadores_bye = datos_t["resultados_rondas"][r_str]["byes"]
@@ -424,8 +442,10 @@ elif st.session_state.vista == "rondas":
                     key=f"pts_B_{t_actual}_{ronda}_{m_str_mesa}",
                 )
 
-            datos_mesa["pts_A"] = pts_a
-            datos_mesa["pts_B"] = pts_b
+            if datos_mesa["pts_A"] != pts_a or datos_mesa["pts_B"] != pts_b:
+                datos_mesa["pts_A"] = pts_a
+                datos_mesa["pts_B"] = pts_b
+                guardar_estado_general(st.session_state.torneos)
 
     if jugadores_bye:
         meta = datos_t["meta"]
@@ -439,16 +459,19 @@ elif st.session_state.vista == "rondas":
         if ronda > 1:
             if st.button("Ir a la ronda anterior", use_container_width=True):
                 datos_t["ronda_actual"] -= 1
+                guardar_estado_general(st.session_state.torneos)
                 st.rerun()
 
     with col_sig:
         if ronda < datos_t["rondas"]:
             if st.button("Ir a la siguiente ronda", use_container_width=True):
                 datos_t["ronda_actual"] += 1
+                guardar_estado_general(st.session_state.torneos)
                 st.rerun()
         else:
             if st.button("GENERAR RANKING FINAL", type="primary", use_container_width=True):
                 datos_t["estado_torneo"] = "finalizado"
+                guardar_estado_general(st.session_state.torneos)
                 st.session_state.vista = "finalizado"
                 st.rerun()
 
@@ -487,6 +510,7 @@ elif st.session_state.vista == "finalizado":
         if st.button("⬅️ Volver a Rondas para Corregir", use_container_width=True):
             datos_t["estado_torneo"] = "rondas"
             datos_t["ronda_actual"] = datos_t["rondas"]
+            guardar_estado_general(st.session_state.torneos)
             st.session_state.vista = "rondas"
             st.rerun()
 
@@ -514,9 +538,7 @@ elif st.session_state.vista == "lista_torneos":
             with col_abrir:
                 if st.button(etiqueta, key=f"abrir_{nombre}", use_container_width=True):
                     st.session_state.torneo_actual = nombre
-                    st.session_state.vista = info.get("estado_torneo", "inscripcion")
-                    if st.session_state.vista == "inscripcion":
-                        st.session_state.vista = "inscribir_atletas"
+                    st.session_state.vista = info.get("estado_torneo", "inscribir_atletas")
                     st.rerun()
             with col_borrar:
                 if st.button("🗑️ Eliminar Torneo", key=f"req_del_{nombre}", use_container_width=True):
@@ -534,6 +556,7 @@ elif st.session_state.vista == "lista_torneos":
                 if st.button("Confirmar Eliminación", type="primary", use_container_width=True):
                     if clave_confirm == CLAVE_ACCESO:
                         del st.session_state.torneos[t_del]
+                        guardar_estado_general(st.session_state.torneos)
                         if st.session_state.torneo_actual == t_del:
                             st.session_state.torneo_actual = None
                         st.session_state.torneo_a_eliminar = None
