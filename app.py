@@ -43,7 +43,7 @@ if "torneo_a_eliminar" not in st.session_state:
 
 
 # -----------------------------------------------------------------------------
-# 2. MOTOR DE CALCULO Y RANKING POR RONDA INDEPENDIENTE
+# 2. MOTOR DE CALCULO Y RANKING (MENORES O IGUALES)
 # -----------------------------------------------------------------------------
 def calcular_ranking(datos_t):
     meta = datos_t["meta"]
@@ -59,6 +59,7 @@ def calcular_ranking(datos_t):
             "PF": 0,
             "PC": 0,
             "DIF": 0,
+            "amonestaciones": datos_t.get("amonestaciones", {}).get(jug, 0),
             "activo": jug not in datos_t.get("retirados", []),
         }
 
@@ -66,46 +67,26 @@ def calcular_ranking(datos_t):
         mesas = ronda_data.get("mesas", {})
         byes = ronda_data.get("byes", [])
 
-        # Procesar Byes de la ronda
         for jug_bye in byes:
             if jug_bye in stats:
                 stats[jug_bye]["JG"] += 1
                 stats[jug_bye]["PF"] += meta
                 stats[jug_bye]["PC"] += meta // 2
 
-        # Procesar Mesas de la ronda
         for m_key, datos in mesas.items():
             pareja_a = list(set(datos.get("pareja_A", [])))
             pareja_b = list(set(datos.get("pareja_B", [])))
-            
-            pts_a_brutos = datos.get("pts_A", 0)
-            pts_b_brutos = datos.get("pts_B", 0)
-            
-            penal_a = datos.get("penal_A", 0)
-            penal_b = datos.get("penal_B", 0)
+            pts_a = datos.get("pts_A", 0)
+            pts_b = datos.get("pts_B", 0)
 
-            # Aplicar penalización de la ronda a los puntos a favor de cada pareja
-            pts_a_netos = max(0, pts_a_brutos - penal_a)
-            pts_b_netos = max(0, pts_b_brutos - penal_b)
-
-            # Determinar ganador de la partida en base a los puntos netos y regla <=
-            ganador_mesa = None
-            if pts_a_netos > pts_b_netos:
-                ganador_mesa = "A"
-            elif pts_b_netos > pts_a_netos:
-                ganador_mesa = "B"
-            else:
-                # Si quedan iguales (o menor/igual tras penalización), se considera derrota para ambos o gana B por defecto según criterio estricto
-                ganador_mesa = "B" if pts_b_netos >= pts_a_netos else "A"
-
-            if ganador_mesa == "A":
+            if pts_a > pts_b:
                 for j in pareja_a:
                     if j in stats:
                         stats[j]["JG"] += 1
                 for j in pareja_b:
                     if j in stats:
                         stats[j]["JP"] += 1
-            else:
+            elif pts_b > pts_a:
                 for j in pareja_b:
                     if j in stats:
                         stats[j]["JG"] += 1
@@ -115,17 +96,27 @@ def calcular_ranking(datos_t):
 
             for j in pareja_a:
                 if j in stats:
-                    stats[j]["PF"] += pts_a_netos
-                    stats[j]["PC"] += pts_b_brutos
+                    stats[j]["PF"] += pts_a
+                    stats[j]["PC"] += pts_b
 
             for j in pareja_b:
                 if j in stats:
-                    stats[j]["PF"] += pts_b_netos
-                    stats[j]["PC"] += pts_a_brutos
+                    stats[j]["PF"] += pts_b
+                    stats[j]["PC"] += pts_a
 
     lista_stats = []
     for jug, d in stats.items():
+        penalizacion = d["amonestaciones"]
+        if penalizacion > 0:
+            d["PF"] = max(0, d["PF"] - penalizacion)
+
         d["DIF"] = d["PF"] - d["PC"]
+
+        total_juegos = d["JG"] + d["JP"]
+        if total_juegos > 0 and d["PF"] <= d["PC"]:
+            d["JG"] = 0
+            d["JP"] = total_juegos
+
         lista_stats.append(d)
 
     lista_stats.sort(
@@ -223,6 +214,7 @@ elif st.session_state.vista == "crear_torneo":
                     "atletas": [],
                     "retirados": [],
                     "ronda_actual": 1,
+                    "amonestaciones": {},
                     "historial_byes": [],
                     "resultados_rondas": {},
                     "estado_torneo": "inscribir_atletas",
@@ -304,6 +296,8 @@ elif st.session_state.vista == "rondas":
         datos_t["historial_byes"] = []
     if "retirados" not in datos_t:
         datos_t["retirados"] = []
+    if "amonestaciones" not in datos_t:
+        datos_t["amonestaciones"] = {}
     if "ronda_actual" not in datos_t:
         datos_t["ronda_actual"] = 1
 
@@ -312,7 +306,7 @@ elif st.session_state.vista == "rondas":
     st.title(f"{t_actual} ({datos_t['modalidad']})")
     st.subheader(f"Ronda {ronda} de {datos_t['rondas']}")
 
-    col_ini, col_rank, col_ret = st.columns([2, 2, 2])
+    col_ini, col_rank, col_ret, col_amon = st.columns([2, 2, 2, 2])
 
     with col_ini:
         if st.button("⬅ Menú Principal", use_container_width=True):
@@ -326,6 +320,10 @@ elif st.session_state.vista == "rondas":
     with col_ret:
         if st.button("Retirados", use_container_width=True):
             st.session_state.ver_ret = not st.session_state.get("ver_ret", False)
+
+    with col_amon:
+        if st.button("Amonestaciones", use_container_width=True):
+            st.session_state.ver_amon = not st.session_state.get("ver_amon", False)
 
     if st.session_state.get("ver_ranking", False):
         st.markdown("### Tabla de Posiciones Acumulada")
@@ -362,6 +360,20 @@ elif st.session_state.vista == "rondas":
                     st.error(f"{j_ret_sel} expulsado con marcador 0-{meta}.")
                     st.rerun()
 
+    if st.session_state.get("ver_amon", False):
+        st.markdown("### Registro de Amonestaciones")
+        col_j_amon, col_pts_amon = st.columns(2)
+        with col_j_amon:
+            j_sel = st.selectbox("Seleccione Atleta:", datos_t["atletas"], key="sel_amon")
+        with col_pts_amon:
+            pts_penal = st.number_input("Puntos de Penalización:", min_value=0, value=0, step=10)
+
+        if st.button("Aplicar Penalización", use_container_width=True):
+            datos_t["amonestaciones"][j_sel] = pts_penal
+            guardar_estado_general(st.session_state.torneos)
+            st.success(f"Penalización de {j_sel} establecida en {pts_penal} puntos.")
+            st.rerun()
+
     st.markdown("---")
 
     r_str = str(ronda)
@@ -391,4 +403,115 @@ elif st.session_state.vista == "rondas":
             mesa_num = i + 1
             m_str_mesa = f"mesa_{mesa_num}"
             j1, j2, j3, j4 = activos[i * 4 : i * 4 + 4]
-            mesas_gener
+            mesas_generadas[m_str_mesa] = {
+                "pareja_A": [j1, j3],
+                "pareja_B": [j2, j4],
+                "pts_A": 0,
+                "pts_B": 0,
+            }
+
+        datos_t["resultados_rondas"][r_str]["mesas"] = mesas_generadas
+        datos_t["resultados_rondas"][r_str]["byes"] = jugadores_bye
+        guardar_estado_general(st.session_state.torneos)
+
+    mesas_guardadas = datos_t["resultados_rondas"][r_str]["mesas"]
+    jugadores_bye = datos_t["resultados_rondas"][r_str]["byes"]
+
+    st.subheader(f"Mesas de Juego - Ronda {ronda}")
+
+    for m_str_mesa, datos_mesa in mesas_guardadas.items():
+        pareja_a = datos_mesa["pareja_A"]
+        pareja_b = datos_mesa["pareja_B"]
+        mesa_num = m_str_mesa.split("_")[1]
+
+        with st.expander(
+            f"MESA {mesa_num}: Pareja A ({pareja_a[0]} - {pareja_a[1]}) vs Pareja B ({pareja_b[0]} - {pareja_b[1]})",
+            expanded=True,
+        ):
+            col_pA, col_pB = st.columns(2)
+            with col_pA:
+                st.markdown(f"**Pareja A:** {pareja_a[0]} y {pareja_a[1]}")
+                pts_a = st.number_input(
+                    f"Puntos Pareja A (Mesa {mesa_num})",
+                    min_value=0,
+                    max_value=datos_t["meta"],
+                    value=int(datos_mesa.get("pts_A", 0)),
+                    key=f"pts_A_{t_actual}_{ronda}_{m_str_mesa}",
+                )
+            with col_pB:
+                st.markdown(f"**Pareja B:** {pareja_b[0]} y {pareja_b[1]}")
+                pts_b = st.number_input(
+                    f"Puntos Pareja B (Mesa {mesa_num})",
+                    min_value=0,
+                    max_value=datos_t["meta"],
+                    value=int(datos_mesa.get("pts_B", 0)),
+                    key=f"pts_B_{t_actual}_{ronda}_{m_str_mesa}",
+                )
+
+            if datos_mesa["pts_A"] != pts_a or datos_mesa["pts_B"] != pts_b:
+                datos_mesa["pts_A"] = pts_a
+                datos_mesa["pts_B"] = pts_b
+                guardar_estado_general(st.session_state.torneos)
+
+    if jugadores_bye:
+        meta = datos_t["meta"]
+        for idx_b, jb in enumerate(jugadores_bye):
+            st.info(f"Jugador libre (Bye) #{idx_b + 1}: {jb} — Gana automático {meta} a {meta // 2}.")
+
+    st.markdown("---")
+    col_ant, col_sig = st.columns(2)
+
+    with col_ant:
+        if ronda > 1:
+            if st.button("Ir a la ronda anterior", use_container_width=True):
+                datos_t["ronda_actual"] -= 1
+                guardar_estado_general(st.session_state.torneos)
+                st.rerun()
+
+    with col_sig:
+        if ronda < datos_t["rondas"]:
+            if st.button("Ir a la siguiente ronda", use_container_width=True):
+                datos_t["ronda_actual"] += 1
+                guardar_estado_general(st.session_state.torneos)
+                st.rerun()
+        else:
+            if st.button("GENERAR RANKING FINAL", type="primary", use_container_width=True):
+                datos_t["estado_torneo"] = "finalizado"
+                guardar_estado_general(st.session_state.torneos)
+                st.session_state.vista = "finalizado"
+                st.rerun()
+
+# -----------------------------------------------------------------------------
+# 9. PODIO Y RESULTADOS FINALIZADOS
+# -----------------------------------------------------------------------------
+elif st.session_state.vista == "finalizado":
+    t_actual = st.session_state.torneo_actual
+    datos_t = st.session_state.torneos[t_actual]
+    st.balloons()
+
+    st.title(f"{t_actual} — Resultados Finales")
+    st.caption(f"Modalidad: {datos_t['modalidad']} | Meta: {datos_t['meta']} pts")
+
+    ranking_final = calcular_ranking(datos_t)
+
+    st.markdown("### Podio de Campeones")
+    col_med1, col_med2, col_med3 = st.columns(3)
+
+    if len(ranking_final) >= 1:
+        with col_med1:
+            st.metric("🥇 PRIMER LUGAR", ranking_final[0]["nombre"], f"{ranking_final[0]['JG']} JG | Dif: {ranking_final[0]['DIF']}")
+    if len(ranking_final) >= 2:
+        with col_med2:
+            st.metric("🥈 SEGUNDO LUGAR", ranking_final[1]["nombre"], f"{ranking_final[1]['JG']} JG | Dif: {ranking_final[1]['DIF']}")
+    if len(ranking_final) >= 3:
+        with col_med3:
+            st.metric("🥉 TERCER LUGAR", ranking_final[2]["nombre"], f"{ranking_final[2]['JG']} JG | Dif: {ranking_final[2]['DIF']}")
+
+    st.markdown("---")
+    st.markdown("### Clasificación General")
+    st.dataframe(ranking_final, use_container_width=True)
+
+    col_btn_volver, col_btn_inicio = st.columns(2)
+    with col_btn_volver:
+        if st.button("⬅️ Volver a Rondas para Corregir", use_container_width=True):
+            datos_t["estado_torneo"] =
