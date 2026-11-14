@@ -40,8 +40,8 @@ def calcular_ranking(datos_t):
             "PF": 0,
             "PC": 0,
             "DIF": 0,
-            "amonestaciones": datos_t["amonestaciones"].get(jug, 0),
-            "activo": jug not in datos_t["retirados"],
+            "amonestaciones": datos_t.get("amonestaciones", {}).get(jug, 0),
+            "activo": jug not in datos_t.get("retirados", []),
         }
 
     for r_key, ronda_data in datos_t.get("resultados_rondas", {}).items():
@@ -260,6 +260,19 @@ elif st.session_state.vista == "inscribir_atletas":
 elif st.session_state.vista == "rondas":
     t_actual = st.session_state.torneo_actual
     datos_t = st.session_state.torneos[t_actual]
+    
+    # Asegurar llaves críticas si el torneo viene de guardados anteriores
+    if "resultados_rondas" not in datos_t:
+        datos_t["resultados_rondas"] = {}
+    if "historial_byes" not in datos_t:
+        datos_t["historial_byes"] = []
+    if "retirados" not in datos_t:
+        datos_t["retirados"] = []
+    if "amonestaciones" not in datos_t:
+        datos_t["amonestaciones"] = {}
+    if "ronda_actual" not in datos_t:
+        datos_t["ronda_actual"] = 1
+
     ronda = datos_t["ronda_actual"]
 
     st.title(f"{t_actual} ({datos_t['modalidad']})")
