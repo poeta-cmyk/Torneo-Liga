@@ -115,7 +115,7 @@ elif st.session_state.vista == "crear_torneo":
                 st.rerun()
 
 # -----------------------------------------------------------------------------
-# 6. AGREGAR ATLETAS AL TORNEO
+# 6. AGREGAR ATLETAS AL TORNEO Y COMENZAR
 # -----------------------------------------------------------------------------
 elif st.session_state.vista == "inscribir_atletas":
     t_actual = st.session_state.torneo_actual
@@ -147,12 +147,25 @@ elif st.session_state.vista == "inscribir_atletas":
 
     atletas = datos_t["atletas"]
     st.markdown(f"**Atletas Inscritos ({len(atletas)}):**")
+    
+    indices_a_eliminar = []
     for idx, atleta in enumerate(atletas):
         c1, c2 = st.columns([6, 1])
         c1.write(f"**{idx + 1}.** {atleta}")
         if c2.button("Eliminar", key=f"del_{idx}"):
+            indices_a_eliminar.append(idx)
+
+    if indices_a_eliminar:
+        for idx in reversed(indices_a_eliminar):
             atletas.pop(idx)
-            st.rerun()
+        st.rerun()
+
+    st.markdown("---")
+    if st.button("Comenzar el torneo", type="primary", use_container_width=True):
+        if len(atletas) < 4:
+            st.warning("Se requieren al menos 4 atletas inscritos para iniciar el torneo.")
+        else:
+            st.success("¡Torneo listo para iniciar la fase de emparejamientos!")
 
 # -----------------------------------------------------------------------------
 # 7. LISTA DE TORNEOS GUARDADOS (CON ELIMINACION PROTEGIDA POR CLAVE)
