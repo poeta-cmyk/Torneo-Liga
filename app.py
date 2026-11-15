@@ -279,7 +279,7 @@ elif st.session_state.vista == "inscribir_atletas":
             st.rerun()
 
 # -----------------------------------------------------------------------------
-# 8. RONDAS Y GENERACION CON BUSQUEDA COMBINATORIA EXHAUSTIVA DE PAREJAS
+# 8. RONDAS Y GENERACION CON BUSQUEDA COMBINATORIA ESTRICTA
 # -----------------------------------------------------------------------------
 elif st.session_state.vista == "rondas":
     t_actual = st.session_state.torneo_actual
@@ -401,50 +401,55 @@ elif st.session_state.vista == "rondas":
         num_mesas = len(activos) // 4
         mesas_generadas = {}
 
-        # Historial estricto de parejas convertidas a tuplas ordenadas
+        # Historial de parejas como conjunto de tuplas ordenadas para validación exacta
         parejas_historicas = set(tuple(sorted(p)) for p in datos_t.get("historial_parejas", []))
         
-        # Algoritmo de emparejamiento estricto sin repetición
         pool = list(activos)
         
         if len(pool) == 8 and num_mesas == 2:
             import itertools
-            # Para 8 jugadores exactos, generamos particiones óptimas de mesas que eviten parejas repetidas en el historial
-            mejor_asignacion = None
-            
-            # Generar todas las formas de repartir 8 jugadores en 2 mesas de 4
-            indices = list(range(8))
             encontrado_perfecto = False
+            indices = list(range(8))
             
+            # Recorrer todas las combinaciones posibles de partición en dos mesas de 4
             for p1 in itertools.combinations(indices, 4):
                 resto = [i for i in indices if i not in p1]
                 grupo1 = [pool[i] for i in p1]
                 grupo2 = [pool[i] for i in resto]
                 
-                # Probar sub-parejas posibles para grupo 1
-                for pa1 in [(grupo1[0], grupo1[1]), (grupo1[0], grupo1[2]), (grupo1[0], grupo1[3])]:
-                    pb1 = tuple(x for x in grupo1 if x not in pa1)
+                # Las 3 formas posibles de formar 2 parejas dentro de un grupo de 4 personas (A, B, C, D)
+                # Forma 1: (A,B) y (C,D) | Forma 2: (A,C) y (B,D) | Forma 3: (A,D) y (B,C)
+                formas_g1 = [
+                    ([grupo1[0], grupo1[1]], [grupo1[2], grupo1[3]]),
+                    ([grupo1[0], grupo1[2]], [grupo1[1], grupo1[3]]),
+                    ([grupo1[0], grupo1[3]], [grupo1[1], grupo1[2]])
+                ]
+                
+                formas_g2 = [
+                    ([grupo2[0], grupo2[1]], [grupo2[2], grupo2[3]]),
+                    ([grupo2[0], grupo2[2]], [grupo2[1], grupo2[3]]),
+                    ([grupo2[0], grupo2[3]], [grupo2[1], grupo2[2]])
+                ]
+                
+                for pa1, pb1 in formas_g1:
                     tpa1, tpb1 = tuple(sorted(pa1)), tuple(sorted(pb1))
-                    
                     if tpa1 in parejas_historicas or tpb1 in parejas_historicas:
                         continue
                         
-                    # Probar sub-parejas posibles para grupo 2
-                    for pa2 in [(grupo2[0], grupo2[1]), (grupo2[0], grupo2[2]), (grupo2[0], grupo2[3])]:
-                        pb2 = tuple(x for x in grupo2 if x not in pa2)
+                    for pa2, pb2 in formas_g2:
                         tpa2, tpb2 = tuple(sorted(pa2)), tuple(sorted(pb2))
-                        
                         if tpa2 in parejas_historicas or tpb2 in parejas_historicas:
                             continue
                             
-                        # Encontramos distribución 100% libre de parejas repetidas
-                        mesas_generadas["mesa_1"] = {"pareja_A": list(pa1), "pareja_B": list(pb1), "pts_A": 0, "pts_B": 0}
-                        mesas_generadas["mesa_2"] = {"pareja_A": list(pa2), "pareja_B": list(pb2), "pts_A": 0, "pts_B": 0}
+                        # ¡Encontramos una distribución donde ninguna de las 4 parejas se ha repetido jamás!
+                        mesas_generadas["mesa_1"] = {"pareja_A": pa1, "pareja_B": pb1, "pts_A": 0, "pts_B": 0}
+                        mesas_generadas["mesa_2"] = {"pareja_A": pa2, "pareja_B": pb2, "pts_A": 0, "pts_B": 0}
                         
-                        datos_t["historial_parejas"].append(list(pa1))
-                        datos_t["historial_parejas"].append(list(pb1))
-                        datos_t["historial_parejas"].append(list(pa2))
-                        datos_t["historial_parejas"].append(list(pb2))
+                        datos_t["historial_parejas"].append(pa1)
+                        datos_t["historial_parejas"].append(pb1)
+                        datos_t["historial_parejas"].append(pa2)
+                        datos_t["historial_parejas"].append(pb2)
+                        
                         encontrado_perfecto = True
                         break
                     if encontrado_perfecto:
@@ -453,26 +458,27 @@ elif st.session_state.vista == "rondas":
                     break
             
             if not encontrado_perfecto:
-                # Fallback estándar si se agotaran las combinaciones puras
-                for i in range(num_mesas):
-                    m_str_mesa = f"mesa_{i+1}"
-                    j1, j2, j3, j4 = pool[i*4], pool[i*4+1], pool[i*4+2], pool[i*4+3]
-                    mesas_generadas[m_str_mesa] = {"pareja_A": [j1, j3], "pareja_B": [j2, j4], "pts_A": 0, "pts_B": 0}
-                    datos_t["historial_parejas"].append([j1, j3])
-                    datos_t["historial_parejas"].append([j2, j4])
+                # Si por combinatoria estricta en ronda avanzada llegara a requerirse, se asigna limpio
+                j1, j2, j3, j4, j5, j6, j7, j8 = pool
+                mesas_generadas["mesa_1"] = {"pareja_A": [j1, j2], "pareja_B": [j3, j4], "pts_A": 0, "pts_B": 0}
+                mesas_generadas["mesa_2"] = {"pareja_A": [j5, j6], "pareja_B": [j7, j8], "pts_A": 0, "pts_B": 0}
+                datos_t["historial_parejas"].append([j1, j2])
+                datos_t["historial_parejas"].append([j3, j4])
+                datos_t["historial_parejas"].append([j5, j6])
+                datos_t["historial_parejas"].append([j7, j8])
         else:
             for i in range(num_mesas):
                 mesa_num = i + 1
                 m_str_mesa = f"mesa_{mesa_num}"
                 j1, j2, j3, j4 = pool[0], pool[1], pool[2], pool[3]
                 mesas_generadas[m_str_mesa] = {
-                    "pareja_A": [j1, j3],
-                    "pareja_B": [j2, j4],
+                    "pareja_A": [j1, j2],
+                    "pareja_B": [j3, j4],
                     "pts_A": 0,
                     "pts_B": 0,
                 }
-                datos_t["historial_parejas"].append([j1, j3])
-                datos_t["historial_parejas"].append([j2, j4])
+                datos_t["historial_parejas"].append([j1, j2])
+                datos_t["historial_parejas"].append([j3, j4])
                 pool = pool[4:]
 
         datos_t["resultados_rondas"][r_str]["mesas"] = mesas_generadas
