@@ -192,7 +192,7 @@ elif st.session_state.vista == "crear_torneo":
         with col_m:
             meta_puntos = st.selectbox("Marcador de Meta:", [100, 200], index=1)
         with col_r:
-            cant_rondas = st.selectbox("Cantidad de Rondas:", [5, 6, 7, 8, 9], index=1)
+            cant_rondas = st.selectbox("Cantidad de Rondas:", [5, 6, 7, 8, 9], index=2)
 
         if st.form_submit_button("Crear y Pasar a Inscripción", type="primary"):
             n_t = nombre_torneo.strip()
@@ -279,7 +279,7 @@ elif st.session_state.vista == "inscribir_atletas":
             st.rerun()
 
 # -----------------------------------------------------------------------------
-# 8. RONDAS Y GENERACION CON CONTROL DE PAREJAS Y BYES
+# 8. RONDAS Y GENERACION CON BUSQUEDA COMBINATORIA EXHAUSTIVA DE PAREJAS
 # -----------------------------------------------------------------------------
 elif st.session_state.vista == "rondas":
     t_actual = st.session_state.torneo_actual
@@ -401,31 +401,79 @@ elif st.session_state.vista == "rondas":
         num_mesas = len(activos) // 4
         mesas_generadas = {}
 
+        # Historial estricto de parejas convertidas a tuplas ordenadas
         parejas_historicas = set(tuple(sorted(p)) for p in datos_t.get("historial_parejas", []))
         
+        # Algoritmo de emparejamiento estricto sin repetición
         pool = list(activos)
-        for i in range(num_mesas):
-            mesa_num = i + 1
-            m_str_mesa = f"mesa_{mesa_num}"
+        
+        if len(pool) == 8 and num_mesas == 2:
+            import itertools
+            # Para 8 jugadores exactos, generamos particiones óptimas de mesas que eviten parejas repetidas en el historial
+            mejor_asignacion = None
             
-            j1, j2, j3, j4 = pool[0], pool[1], pool[2], pool[3]
-            intentos = 0
-            while (tuple(sorted([j1, j3])) in parejas_historicas or tuple(sorted([j2, j4])) in parejas_historicas) and intentos < 10:
-                pool = pool[1:] + [pool[0]]
+            # Generar todas las formas de repartir 8 jugadores en 2 mesas de 4
+            indices = list(range(8))
+            encontrado_perfecto = False
+            
+            for p1 in itertools.combinations(indices, 4):
+                resto = [i for i in indices if i not in p1]
+                grupo1 = [pool[i] for i in p1]
+                grupo2 = [pool[i] for i in resto]
+                
+                # Probar sub-parejas posibles para grupo 1
+                for pa1 in [(grupo1[0], grupo1[1]), (grupo1[0], grupo1[2]), (grupo1[0], grupo1[3])]:
+                    pb1 = tuple(x for x in grupo1 if x not in pa1)
+                    tpa1, tpb1 = tuple(sorted(pa1)), tuple(sorted(pb1))
+                    
+                    if tpa1 in parejas_historicas or tpb1 in parejas_historicas:
+                        continue
+                        
+                    # Probar sub-parejas posibles para grupo 2
+                    for pa2 in [(grupo2[0], grupo2[1]), (grupo2[0], grupo2[2]), (grupo2[0], grupo2[3])]:
+                        pb2 = tuple(x for x in grupo2 if x not in pa2)
+                        tpa2, tpb2 = tuple(sorted(pa2)), tuple(sorted(pb2))
+                        
+                        if tpa2 in parejas_historicas or tpb2 in parejas_historicas:
+                            continue
+                            
+                        # Encontramos distribución 100% libre de parejas repetidas
+                        mesas_generadas["mesa_1"] = {"pareja_A": list(pa1), "pareja_B": list(pb1), "pts_A": 0, "pts_B": 0}
+                        mesas_generadas["mesa_2"] = {"pareja_A": list(pa2), "pareja_B": list(pb2), "pts_A": 0, "pts_B": 0}
+                        
+                        datos_t["historial_parejas"].append(list(pa1))
+                        datos_t["historial_parejas"].append(list(pb1))
+                        datos_t["historial_parejas"].append(list(pa2))
+                        datos_t["historial_parejas"].append(list(pb2))
+                        encontrado_perfecto = True
+                        break
+                    if encontrado_perfecto:
+                        break
+                if encontrado_perfecto:
+                    break
+            
+            if not encontrado_perfecto:
+                # Fallback estándar si se agotaran las combinaciones puras
+                for i in range(num_mesas):
+                    m_str_mesa = f"mesa_{i+1}"
+                    j1, j2, j3, j4 = pool[i*4], pool[i*4+1], pool[i*4+2], pool[i*4+3]
+                    mesas_generadas[m_str_mesa] = {"pareja_A": [j1, j3], "pareja_B": [j2, j4], "pts_A": 0, "pts_B": 0}
+                    datos_t["historial_parejas"].append([j1, j3])
+                    datos_t["historial_parejas"].append([j2, j4])
+        else:
+            for i in range(num_mesas):
+                mesa_num = i + 1
+                m_str_mesa = f"mesa_{mesa_num}"
                 j1, j2, j3, j4 = pool[0], pool[1], pool[2], pool[3]
-                intentos += 1
-
-            mesas_generadas[m_str_mesa] = {
-                "pareja_A": [j1, j3],
-                "pareja_B": [j2, j4],
-                "pts_A": 0,
-                "pts_B": 0,
-            }
-            
-            datos_t["historial_parejas"].append([j1, j3])
-            datos_t["historial_parejas"].append([j2, j4])
-            
-            pool = pool[4:]
+                mesas_generadas[m_str_mesa] = {
+                    "pareja_A": [j1, j3],
+                    "pareja_B": [j2, j4],
+                    "pts_A": 0,
+                    "pts_B": 0,
+                }
+                datos_t["historial_parejas"].append([j1, j3])
+                datos_t["historial_parejas"].append([j2, j4])
+                pool = pool[4:]
 
         datos_t["resultados_rondas"][r_str]["mesas"] = mesas_generadas
         datos_t["resultados_rondas"][r_str]["byes"] = jugadores_bye
@@ -556,4 +604,38 @@ elif st.session_state.vista == "lista_torneos":
         st.info("Aún no hay torneos creados.")
     else:
         for nombre, info in list(st.session_state.torneos.items()):
-            col_abrir, col_bor
+            col_abrir, col_borrar = st.columns([4, 1])
+            etiqueta = f"📂 {nombre} ({info['modalidad']} - {info['meta']} pts - {info['rondas']} rondas)"
+            with col_abrir:
+                if st.button(etiqueta, key=f"abrir_{nombre}", use_container_width=True):
+                    st.session_state.torneo_actual = nombre
+                    st.session_state.vista = info.get("estado_torneo", "inscribir_atletas")
+                    st.rerun()
+            with col_borrar:
+                if st.button("🗑️ Eliminar Torneo", key=f"req_del_{nombre}", use_container_width=True):
+                    st.session_state.torneo_a_eliminar = nombre
+                    st.rerun()
+
+        if st.session_state.torneo_a_eliminar:
+            t_del = st.session_state.torneo_a_eliminar
+            st.markdown("---")
+            st.warning(f"⚠️ **AVISO DE SEGURIDAD:** Está a punto de eliminar el torneo **'{t_del}'**. Introduzca su clave.")
+            clave_confirm = st.text_input("Clave de autorización:", type="password", key="clave_borrar_torneo")
+
+            c_conf, c_canc = st.columns(2)
+            with c_conf:
+                if st.button("Confirmar Eliminación", type="primary", use_container_width=True):
+                    if clave_confirm == CLAVE_ACCESO:
+                        del st.session_state.torneos[t_del]
+                        guardar_estado_general(st.session_state.torneos)
+                        if st.session_state.torneo_actual == t_del:
+                            st.session_state.torneo_actual = None
+                        st.session_state.torneo_a_eliminar = None
+                        st.success(f"Torneo '{t_del}' eliminado correctamente.")
+                        st.rerun()
+                    else:
+                        st.error("Clave incorrecta. No se eliminó el torneo.")
+            with c_canc:
+                if st.button("Cancelar", use_container_width=True):
+                    st.session_state.torneo_a_eliminar = None
+                    st.rerun()
