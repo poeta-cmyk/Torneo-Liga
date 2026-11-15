@@ -269,4 +269,291 @@ elif st.session_state.vista == "inscribir_atletas":
 
     st.markdown("---")
     if st.button("Comenzar el torneo", type="primary", use_container_width=True):
-        if
+        if len(atletas) < 4:
+            st.warning("Se requieren al menos 4 atletas inscritos para iniciar el torneo.")
+        else:
+            datos_t["estado_torneo"] = "rondas"
+            datos_t["ronda_actual"] = 1
+            guardar_estado_general(st.session_state.torneos)
+            st.session_state.vista = "rondas"
+            st.rerun()
+
+# -----------------------------------------------------------------------------
+# 8. RONDAS Y GENERACION CON CONTROL DE PAREJAS Y BYES
+# -----------------------------------------------------------------------------
+elif st.session_state.vista == "rondas":
+    t_actual = st.session_state.torneo_actual
+    datos_t = st.session_state.torneos[t_actual]
+    
+    if "resultados_rondas" not in datos_t:
+        datos_t["resultados_rondas"] = {}
+    if "historial_byes" not in datos_t:
+        datos_t["historial_byes"] = []
+    if "historial_parejas" not in datos_t:
+        datos_t["historial_parejas"] = []
+    if "retirados" not in datos_t:
+        datos_t["retirados"] = []
+    if "amonestaciones" not in datos_t:
+        datos_t["amonestaciones"] = {}
+    if "ronda_actual" not in datos_t:
+        datos_t["ronda_actual"] = 1
+
+    ronda = datos_t["ronda_actual"]
+
+    st.title(f"{t_actual} ({datos_t['modalidad']})")
+    st.subheader(f"Ronda {ronda} de {datos_t['rondas']}")
+
+    col_ini, col_rank, col_ret, col_amon = st.columns([2, 2, 2, 2])
+
+    with col_ini:
+        if st.button("⬅ Menú Principal", use_container_width=True):
+            st.session_state.vista = "puerta"
+            st.rerun()
+
+    with col_rank:
+        if st.button("Ver Ranking", use_container_width=True):
+            st.session_state.ver_ranking = not st.session_state.get("ver_ranking", False)
+
+    with col_ret:
+        if st.button("Retirados", use_container_width=True):
+            st.session_state.ver_ret = not st.session_state.get("ver_ret", False)
+
+    with col_amon:
+        if st.button("Amonestaciones", use_container_width=True):
+            st.session_state.ver_amon = not st.session_state.get("ver_amon", False)
+
+    if st.session_state.get("ver_ranking", False):
+        st.markdown("### Tabla de Posiciones Acumulada")
+        st.dataframe(calcular_ranking(datos_t), use_container_width=True)
+
+    if st.session_state.get("ver_ret", False):
+        st.markdown("### Gestión de Atletas Retirados")
+        j_ret_sel = st.selectbox("Seleccione Atleta:", datos_t["atletas"])
+        col_ret_norm, col_ret_exp = st.columns(2)
+
+        with col_ret_norm:
+            if st.button("Retiro Normal (Fin de Ronda)", use_container_width=True):
+                if j_ret_sel not in datos_t["retirados"]:
+                    datos_t["retirados"].append(j_ret_sel)
+                    guardar_estado_general(st.session_state.torneos)
+                    st.success(f"{j_ret_sel} retirado respetando su puntaje.")
+                    st.rerun()
+
+        with col_ret_exp:
+            if st.button("Expulsión (Forfeit 0-Meta)", use_container_width=True):
+                if j_ret_sel not in datos_t["retirados"]:
+                    datos_t["retirados"].append(j_ret_sel)
+                    meta = datos_t["meta"]
+                    r_str = str(ronda)
+                    if r_str in datos_t["resultados_rondas"] and "mesas" in datos_t["resultados_rondas"][r_str]:
+                        for m_key, d_m in datos_t["resultados_rondas"][r_str]["mesas"].items():
+                            if j_ret_sel in d_m["pareja_A"]:
+                                d_m["pts_A"] = 0
+                                d_m["pts_B"] = meta
+                            elif j_ret_sel in d_m["pareja_B"]:
+                                d_m["pts_A"] = meta
+                                d_m["pts_B"] = 0
+                    guardar_estado_general(st.session_state.torneos)
+                    st.error(f"{j_ret_sel} expulsado con marcador 0-{meta}.")
+                    st.rerun()
+
+    if st.session_state.get("ver_amon", False):
+        st.markdown("### Registro de Amonestaciones")
+        col_j_amon, col_pts_amon = st.columns(2)
+        with col_j_amon:
+            j_sel = st.selectbox("Seleccione Atleta:", datos_t["atletas"], key="sel_amon")
+        with col_pts_amon:
+            pts_penal = st.number_input("Puntos de Penalización:", min_value=0, value=0, step=10)
+
+        if st.button("Aplicar Penalización", use_container_width=True):
+            datos_t["amonestaciones"][j_sel] = pts_penal
+            guardar_estado_general(st.session_state.torneos)
+            st.success(f"Penalización de {j_sel} establecida en {pts_penal} puntos.")
+            st.rerun()
+
+    st.markdown("---")
+
+    r_str = str(ronda)
+    if r_str not in datos_t["resultados_rondas"]:
+        datos_t["resultados_rondas"][r_str] = {}
+
+    if "mesas" not in datos_t["resultados_rondas"][r_str]:
+        ranking_actual = calcular_ranking(datos_t)
+        activos = [d["nombre"] for d in ranking_actual if d["activo"]]
+
+        jugadores_bye = []
+        residuo = len(activos) % 4
+        if residuo != 0:
+            candidatos_disponibles = [j for j in reversed(activos) if j not in datos_t["historial_byes"]]
+            if len(candidatos_disponibles) < residuo:
+                datos_t["historial_byes"] = []
+                candidatos_disponibles = list(reversed(activos))
+
+            for candid in candidatos_disponibles:
+                if len(jugadores_bye) < residuo:
+                    jugadores_bye.append(candid)
+
+            for jb in jugadores_bye:
+                activos.remove(jb)
+                if jb not in datos_t["historial_byes"]:
+                    datos_t["historial_byes"].append(jb)
+
+        num_mesas = len(activos) // 4
+        mesas_generadas = {}
+
+        parejas_historicas = set(tuple(sorted(p)) for p in datos_t.get("historial_parejas", []))
+        
+        pool = list(activos)
+        for i in range(num_mesas):
+            mesa_num = i + 1
+            m_str_mesa = f"mesa_{mesa_num}"
+            
+            j1, j2, j3, j4 = pool[0], pool[1], pool[2], pool[3]
+            intentos = 0
+            while (tuple(sorted([j1, j3])) in parejas_historicas or tuple(sorted([j2, j4])) in parejas_historicas) and intentos < 10:
+                pool = pool[1:] + [pool[0]]
+                j1, j2, j3, j4 = pool[0], pool[1], pool[2], pool[3]
+                intentos += 1
+
+            mesas_generadas[m_str_mesa] = {
+                "pareja_A": [j1, j3],
+                "pareja_B": [j2, j4],
+                "pts_A": 0,
+                "pts_B": 0,
+            }
+            
+            datos_t["historial_parejas"].append([j1, j3])
+            datos_t["historial_parejas"].append([j2, j4])
+            
+            pool = pool[4:]
+
+        datos_t["resultados_rondas"][r_str]["mesas"] = mesas_generadas
+        datos_t["resultados_rondas"][r_str]["byes"] = jugadores_bye
+        guardar_estado_general(st.session_state.torneos)
+
+    mesas_guardadas = datos_t["resultados_rondas"][r_str]["mesas"]
+    jugadores_bye = datos_t["resultados_rondas"][r_str]["byes"]
+
+    st.subheader(f"Mesas de Juego - Ronda {ronda}")
+
+    for m_str_mesa, datos_mesa in mesas_guardadas.items():
+        pareja_a = datos_mesa["pareja_A"]
+        pareja_b = datos_mesa["pareja_B"]
+        mesa_num = m_str_mesa.split("_")[1]
+
+        with st.expander(
+            f"MESA {mesa_num}: Pareja A ({pareja_a[0]} - {pareja_a[1]}) vs Pareja B ({pareja_b[0]} - {pareja_b[1]})",
+            expanded=True,
+        ):
+            col_pA, col_pB = st.columns(2)
+            with col_pA:
+                st.markdown(f"**Pareja A:** {pareja_a[0]} y {pareja_a[1]}")
+                pts_a = st.number_input(
+                    f"Puntos Pareja A (Mesa {mesa_num})",
+                    min_value=0,
+                    max_value=datos_t["meta"],
+                    value=int(datos_mesa.get("pts_A", 0)),
+                    key=f"pts_A_{t_actual}_{ronda}_{m_str_mesa}",
+                )
+            with col_pB:
+                st.markdown(f"**Pareja B:** {pareja_b[0]} y {pareja_b[1]}")
+                pts_b = st.number_input(
+                    f"Puntos Pareja B (Mesa {mesa_num})",
+                    min_value=0,
+                    max_value=datos_t["meta"],
+                    value=int(datos_mesa.get("pts_B", 0)),
+                    key=f"pts_B_{t_actual}_{ronda}_{m_str_mesa}",
+                )
+
+            if datos_mesa["pts_A"] != pts_a or datos_mesa["pts_B"] != pts_b:
+                datos_mesa["pts_A"] = pts_a
+                datos_mesa["pts_B"] = pts_b
+                guardar_estado_general(st.session_state.torneos)
+
+    if jugadores_bye:
+        meta = datos_t["meta"]
+        for idx_b, jb in enumerate(jugadores_bye):
+            st.info(f"Jugador libre (Bye) #{idx_b + 1}: {jb} — Gana automático {meta} a {meta // 2}.")
+
+    st.markdown("---")
+    col_ant, col_sig = st.columns(2)
+
+    with col_ant:
+        if ronda > 1:
+            if st.button("Ir a la ronda anterior", use_container_width=True):
+                datos_t["ronda_actual"] -= 1
+                guardar_estado_general(st.session_state.torneos)
+                st.rerun()
+
+    with col_sig:
+        if ronda < datos_t["rondas"]:
+            if st.button("Ir a la siguiente ronda", use_container_width=True):
+                datos_t["ronda_actual"] += 1
+                guardar_estado_general(st.session_state.torneos)
+                st.rerun()
+        else:
+            if st.button("GENERAR RANKING FINAL", type="primary", use_container_width=True):
+                datos_t["estado_torneo"] = "finalizado"
+                guardar_estado_general(st.session_state.torneos)
+                st.session_state.vista = "finalizado"
+                st.rerun()
+
+# -----------------------------------------------------------------------------
+# 9. PODIO Y RESULTADOS FINALIZADOS
+# -----------------------------------------------------------------------------
+elif st.session_state.vista == "finalizado":
+    t_actual = st.session_state.torneo_actual
+    datos_t = st.session_state.torneos[t_actual]
+    st.balloons()
+
+    st.title(f"{t_actual} — Resultados Finales")
+    st.caption(f"Modalidad: {datos_t['modalidad']} | Meta: {datos_t['meta']} pts")
+
+    ranking_final = calcular_ranking(datos_t)
+
+    st.markdown("### Podio de Campeones")
+    col_med1, col_med2, col_med3 = st.columns(3)
+
+    if len(ranking_final) >= 1:
+        with col_med1:
+            st.metric("🥇 PRIMER LUGAR", ranking_final[0]["nombre"], f"{ranking_final[0]['JG']} JG | Dif: {ranking_final[0]['DIF']}")
+    if len(ranking_final) >= 2:
+        with col_med2:
+            st.metric("🥈 SEGUNDO LUGAR", ranking_final[1]["nombre"], f"{ranking_final[1]['JG']} JG | Dif: {ranking_final[1]['DIF']}")
+    if len(ranking_final) >= 3:
+        with col_med3:
+            st.metric("🥉 TERCER LUGAR", ranking_final[2]["nombre"], f"{ranking_final[2]['JG']} JG | Dif: {ranking_final[2]['DIF']}")
+
+    st.markdown("---")
+    st.markdown("### Clasificación General")
+    st.dataframe(ranking_final, use_container_width=True)
+
+    col_btn_volver, col_btn_inicio = st.columns(2)
+    with col_btn_volver:
+        if st.button("⬅️ Volver a Rondas para Corregir", use_container_width=True):
+            datos_t["estado_torneo"] = "rondas"
+            datos_t["ronda_actual"] = datos_t["rondas"]
+            guardar_estado_general(st.session_state.torneos)
+            st.session_state.vista = "rondas"
+            st.rerun()
+
+    with col_btn_inicio:
+        if st.button("Volver al Menú Principal", type="primary", use_container_width=True):
+            st.session_state.vista = "puerta"
+            st.rerun()
+
+# -----------------------------------------------------------------------------
+# 10. LISTA DE TORNEOS GUARDADOS
+# -----------------------------------------------------------------------------
+elif st.session_state.vista == "lista_torneos":
+    st.title("Torneos Guardados")
+    if st.button("⬅ Volver al Inicio"):
+        st.session_state.torneo_a_eliminar = None
+        st.session_state.vista = "puerta"
+        st.rerun()
+
+    if not st.session_state.torneos:
+        st.info("Aún no hay torneos creados.")
+    else:
+        for nombre, info in list(st.session_state.torneos.items()):
+            col_abrir, col_bor
