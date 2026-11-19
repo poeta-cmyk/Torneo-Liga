@@ -39,7 +39,6 @@ def seleccionar_byes_equitativos(jugadores_ordenados, conteo_byes, cantidad_byes
     """Elige los jugadores que descansan priorizando menor cantidad de Byes previos."""
     if cantidad_byes <= 0:
         return []
-    # Orden estable: primero menos Byes acumulados; en empate, menor prioridad en ranking (final de la lista)
     total = len(jugadores_ordenados)
     candidatos = sorted(
         enumerate(jugadores_ordenados),
@@ -85,8 +84,6 @@ def generar_ronda_completa(activos_ordenados, historial_parejas, conteo_byes):
     parejas = resolver_mesas_sin_repetir(en_juego, usadas)
 
     if parejas is None:
-        # Si el cupo combinatorio de parejas únicas ya se agotó por cantidad de rondas,
-        # prioriza las parejas con menor frecuencia histórica en vez de fallar.
         frecuencia = {}
         for p in historial_parejas:
             if len(p) == 2:
@@ -220,4 +217,80 @@ def calcular_ranking(datos_t):
         penalizacion = d["amonestaciones"]
         if penalizacion > 0:
             d["PF"] = max(0, d["PF"] - penalizacion)
-        d["DIF
+        d["DIF"] = d["PF"] - d["PC"]
+        lista_stats.append(d)
+
+    lista_stats.sort(key=lambda x: (x["JG"], x["DIF"], x["PF"]), reverse=True)
+    return lista_stats
+
+
+# -----------------------------------------------------------------------------
+# 4. ESTADO INICIAL DE SESION
+# -----------------------------------------------------------------------------
+if "autenticado" not in st.session_state:
+    st.session_state.autenticado = False
+if "vista" not in st.session_state:
+    st.session_state.vista = "puerta"
+if "torneos" not in st.session_state:
+    st.session_state.torneos = cargar_estado_general()
+if "torneo_actual" not in st.session_state:
+    st.session_state.torneo_actual = None
+if "modalidad_temp" not in st.session_state:
+    st.session_state.modalidad_temp = None
+if "torneo_a_eliminar" not in st.session_state:
+    st.session_state.torneo_a_eliminar = None
+
+
+# -----------------------------------------------------------------------------
+# 5. PANTALLA DE CLAVE
+# -----------------------------------------------------------------------------
+if not st.session_state.autenticado:
+    st.title("Torneo Liga")
+    st.markdown("*Sistema creado por Franz Lameda*")
+    st.markdown("### Acceso Autorizado")
+    clave = st.text_input("Ingrese la clave de acceso:", type="password")
+    if st.button("Iniciar Sesión"):
+        if clave == CLAVE_ACCESO:
+            st.session_state.autenticado = True
+            st.rerun()
+        else:
+            st.error("Clave incorrecta. Intente nuevamente.")
+    st.stop()
+
+
+# -----------------------------------------------------------------------------
+# 6. PUERTA PRINCIPAL
+# -----------------------------------------------------------------------------
+if st.session_state.vista == "puerta":
+    st.title("Torneo Liga")
+    st.markdown("*Sistema creado por Franz Lameda*")
+    st.markdown("### Seleccione una opción")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("TORNEOS", use_container_width=True):
+            st.session_state.torneo_a_eliminar = None
+            st.session_state.vista = "lista_torneos"
+            st.rerun()
+    with col2:
+        if st.button("NUEVO TORNEO", type="primary", use_container_width=True):
+            st.session_state.vista = "elegir_modalidad"
+            st.rerun()
+
+
+# -----------------------------------------------------------------------------
+# 7. ELEGIR MODALIDAD
+# -----------------------------------------------------------------------------
+elif st.session_state.vista == "elegir_modalidad":
+    st.title("Nuevo Torneo")
+    if st.button("⬅ Volver al Inicio"):
+        st.session_state.vista = "puerta"
+        st.rerun()
+
+    st.markdown("### Seleccione la modalidad del torneo")
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("⚡ TORNEO RELÁMPAGO", use_container_width=True):
+            st.session_state.modalidad_temp = "Relámpago"
+            st.session_state.vista = "crear_torneo"
+            st.rerun
