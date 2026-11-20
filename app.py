@@ -622,4 +622,121 @@ elif st.session_state.vista == "finalizado":
     datos_t = st.session_state.torneos[t_actual]
     st.balloons()
 
-    st.
+    st.title(f"{t_actual} — Resultados Finales")
+    st.caption(
+        f"Modalidad: {datos_t['modalidad']} | Meta: {datos_t['meta']} pts"
+    )
+
+    ranking_final = calcular_ranking(datos_t)
+
+    st.markdown("### Podio de Campeones")
+    col_med1, col_med2, col_med3 = st.columns(3)
+
+    if len(ranking_final) >= 1:
+        with col_med1:
+            st.metric(
+                "🥇 PRIMER LUGAR",
+                ranking_final[0]["nombre"],
+                f"{ranking_final[0]['JG']} JG | Dif: {ranking_final[0]['DIF']}",
+            )
+    if len(ranking_final) >= 2:
+        with col_med2:
+            st.metric(
+                "🥈 SEGUNDO LUGAR",
+                ranking_final[1]["nombre"],
+                f"{ranking_final[1]['JG']} JG | Dif: {ranking_final[1]['DIF']}",
+            )
+    if len(ranking_final) >= 3:
+        with col_med3:
+            st.metric(
+                "🥉 TERCER LUGAR",
+                ranking_final[2]["nombre"],
+                f"{ranking_final[2]['JG']} JG | Dif: {ranking_final[2]['DIF']}",
+            )
+
+    st.markdown("---")
+    st.markdown("### Clasificación General")
+    st.dataframe(ranking_final, use_container_width=True)
+
+    col_btn_volver, col_btn_inicio = st.columns(2)
+    with col_btn_volver:
+        if st.button(
+            "⬅️ Volver a Rondas para Corregir", use_container_width=True
+        ):
+            datos_t["estado_torneo"] = "rondas"
+            datos_t["ronda_actual"] = datos_t["rondas"]
+            guardar_estado_general(st.session_state.torneos)
+            st.session_state.vista = "rondas"
+            st.rerun()
+
+    with col_btn_inicio:
+        if st.button(
+            "Volver al Menú Principal", type="primary", use_container_width=True
+        ):
+            st.session_state.vista = "puerta"
+            st.rerun()
+
+
+# -----------------------------------------------------------------------------
+# 12. LISTA DE TORNEOS GUARDADOS
+# -----------------------------------------------------------------------------
+elif st.session_state.vista == "lista_torneos":
+    st.title("Torneos Guardados")
+    if st.button("⬅ Volver al Inicio"):
+        st.session_state.torneo_a_eliminar = None
+        st.session_state.vista = "puerta"
+        st.rerun()
+
+    if not st.session_state.torneos:
+        st.info("Aún no hay torneos creados.")
+    else:
+        for nombre, info in list(st.session_state.torneos.items()):
+            col_abrir, col_borrar = st.columns([4, 1])
+            etiqueta = f"📂 {nombre} ({info['modalidad']} - {info['meta']} pts - {info['rondas']} rondas)"
+            with col_abrir:
+                if st.button(etiqueta, key=f"abrir_{nombre}", use_container_width=True):
+                    st.session_state.torneo_actual = nombre
+                    st.session_state.vista = info.get(
+                        "estado_torneo", "inscribir_atletas"
+                    )
+                    st.rerun()
+            with col_borrar:
+                if st.button(
+                    "🗑️ Eliminar Torneo",
+                    key=f"req_del_{nombre}",
+                    use_container_width=True,
+                ):
+                    st.session_state.torneo_a_eliminar = nombre
+                    st.rerun()
+
+        if st.session_state.torneo_a_eliminar:
+            t_del = st.session_state.torneo_a_eliminar
+            st.markdown("---")
+            st.warning(
+                f"⚠️ **AVISO DE SEGURIDAD:** Está a punto de eliminar el torneo **'{t_del}'**. Introduzca su clave."
+            )
+            clave_confirm = st.text_input(
+                "Clave de autorización:", type="password", key="clave_borrar_torneo"
+            )
+
+            c_conf, c_canc = st.columns(2)
+            with c_conf:
+                if st.button(
+                    "Confirmar Eliminación",
+                    type="primary",
+                    use_container_width=True,
+                ):
+                    if clave_confirm == CLAVE_ACCESO:
+                        del st.session_state.torneos[t_del]
+                        guardar_estado_general(st.session_state.torneos)
+                        if st.session_state.torneo_actual == t_del:
+                            st.session_state.torneo_actual = None
+                        st.session_state.torneo_a_eliminar = None
+                        st.success(f"Torneo '{t_del}' eliminado correctamente.")
+                        st.rerun()
+                    else:
+                        st.error("Clave incorrecta. No se eliminó el torneo.")
+            with c_canc:
+                if st.button("Cancelar", use_container_width=True):
+                    st.session_state.torneo_a_eliminar = None
+                    st.rerun()
