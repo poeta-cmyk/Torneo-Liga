@@ -11,9 +11,6 @@ CLAVE_ACCESO = "POETA1479"
 ARCHIVO_ESTADO = "torneos_estado.json"
 
 
-# -----------------------------------------------------------------------------
-# 1. PERSISTENCIA Y CARGA DE DATOS
-# -----------------------------------------------------------------------------
 def cargar_estado_general():
     if os.path.exists(ARCHIVO_ESTADO):
         try:
@@ -29,15 +26,11 @@ def guardar_estado_general(torneos):
         json.dump(torneos, f, ensure_ascii=False, indent=4)
 
 
-# -----------------------------------------------------------------------------
-# 2. MOTOR COMBINATORIO DE BYES Y PAREJAS
-# -----------------------------------------------------------------------------
 def normalizar_par(j1, j2):
     return tuple(sorted([j1, j2]))
 
 
 def seleccionar_byes_equitativos(jugadores_ordenados, conteo_byes, cantidad_byes):
-    """Elige los jugadores que descansan priorizando menor cantidad de Byes previos."""
     if cantidad_byes <= 0:
         return []
     total = len(jugadores_ordenados)
@@ -49,7 +42,6 @@ def seleccionar_byes_equitativos(jugadores_ordenados, conteo_byes, cantidad_byes
 
 
 def emparejar_por_ranking(en_juego, usadas):
-    """Arma parejas siguiendo el orden del ranking: (0 con 2) y (1 con 3) por bloque de 4."""
     disponibles = list(en_juego)
     parejas = []
 
@@ -91,7 +83,6 @@ def emparejar_por_ranking(en_juego, usadas):
 
 
 def generar_ronda_completa(activos_ordenados, historial_parejas, conteo_byes):
-    """Genera mesas de 4 jugadores según el orden del ranking y lista de Byes."""
     residuo = len(activos_ordenados) % 4
     byes = seleccionar_byes_equitativos(activos_ordenados, conteo_byes, residuo)
     en_juego = [j for j in activos_ordenados if j not in byes]
@@ -113,7 +104,6 @@ def generar_ronda_completa(activos_ordenados, historial_parejas, conteo_byes):
 
 
 def reconstruir_historiales(datos_t):
-    """Recalcula historial_parejas y conteo_byes desde las rondas registradas."""
     historial_parejas = []
     conteo_byes = {j: 0 for j in datos_t.get("atletas", [])}
 
@@ -135,9 +125,6 @@ def reconstruir_historiales(datos_t):
     return historial_parejas, conteo_byes
 
 
-# -----------------------------------------------------------------------------
-# 3. CALCULO DE RANKING
-# -----------------------------------------------------------------------------
 def calcular_ranking(datos_t):
     meta = datos_t["meta"]
     stats = {}
@@ -209,9 +196,6 @@ def calcular_ranking(datos_t):
     return lista_stats
 
 
-# -----------------------------------------------------------------------------
-# 4. ESTADO INICIAL DE SESION
-# -----------------------------------------------------------------------------
 if "autenticado" not in st.session_state:
     st.session_state.autenticado = False
 if "vista" not in st.session_state:
@@ -226,9 +210,6 @@ if "torneo_a_eliminar" not in st.session_state:
     st.session_state.torneo_a_eliminar = None
 
 
-# -----------------------------------------------------------------------------
-# 5. PANTALLA DE CLAVE
-# -----------------------------------------------------------------------------
 if not st.session_state.autenticado:
     st.title("Torneo Liga")
     st.markdown("*Sistema creado por Franz Lameda*")
@@ -243,9 +224,6 @@ if not st.session_state.autenticado:
     st.stop()
 
 
-# -----------------------------------------------------------------------------
-# 6. PUERTA PRINCIPAL
-# -----------------------------------------------------------------------------
 if st.session_state.vista == "puerta":
     st.title("Torneo Liga")
     st.markdown("*Sistema creado por Franz Lameda*")
@@ -263,9 +241,6 @@ if st.session_state.vista == "puerta":
             st.rerun()
 
 
-# -----------------------------------------------------------------------------
-# 7. ELEGIR MODALIDAD
-# -----------------------------------------------------------------------------
 elif st.session_state.vista == "elegir_modalidad":
     st.title("Nuevo Torneo")
     if st.button("⬅ Volver al Inicio"):
@@ -286,9 +261,6 @@ elif st.session_state.vista == "elegir_modalidad":
             st.rerun()
 
 
-# -----------------------------------------------------------------------------
-# 8. CONFIGURAR TORNEO
-# -----------------------------------------------------------------------------
 elif st.session_state.vista == "crear_torneo":
     mod = st.session_state.modalidad_temp
     st.title(f"Nuevo Torneo ({mod})")
@@ -330,9 +302,6 @@ elif st.session_state.vista == "crear_torneo":
                 st.rerun()
 
 
-# -----------------------------------------------------------------------------
-# 9. INSCRIPCION DE ATLETAS
-# -----------------------------------------------------------------------------
 elif st.session_state.vista == "inscribir_atletas":
     t_actual = st.session_state.torneo_actual
     datos_t = st.session_state.torneos[t_actual]
@@ -397,9 +366,6 @@ elif st.session_state.vista == "inscribir_atletas":
             st.rerun()
 
 
-# -----------------------------------------------------------------------------
-# 10. RONDAS Y EMPAREJAMIENTO
-# -----------------------------------------------------------------------------
 elif st.session_state.vista == "rondas":
     t_actual = st.session_state.torneo_actual
     datos_t = st.session_state.torneos[t_actual]
@@ -474,4 +440,249 @@ elif st.session_state.vista == "rondas":
                                 d_m["pts_A"] = meta
                                 d_m["pts_B"] = 0
                     guardar_estado_general(st.session_state.torneos)
-                    st.
+                    st.error(f"{j_ret_sel} expulsado con marcador 0-{meta}.")
+                    st.rerun()
+
+    if st.session_state.get("ver_amon", False):
+        st.markdown("### Registro de Amonestaciones")
+        col_j_amon, col_pts_amon = st.columns(2)
+        with col_j_amon:
+            j_sel = st.selectbox(
+                "Seleccione Atleta:", datos_t["atletas"], key="sel_amon"
+            )
+        with col_pts_amon:
+            pts_penal = st.number_input(
+                "Puntos de Penalización:", min_value=0, value=0, step=10
+            )
+
+        if st.button("Aplicar Penalización", use_container_width=True):
+            datos_t["amonestaciones"][j_sel] = pts_penal
+            guardar_estado_general(st.session_state.torneos)
+            st.success(
+                f"Penalización de {j_sel} establecida en {pts_penal} puntos."
+            )
+            st.rerun()
+
+    st.markdown("---")
+
+    if r_str not in datos_t["resultados_rondas"]:
+        datos_t["resultados_rondas"][r_str] = {}
+
+    if "mesas" not in datos_t["resultados_rondas"][r_str]:
+        historial_parejas, conteo_byes = reconstruir_historiales(datos_t)
+        ranking_actual = calcular_ranking(datos_t)
+        activos = [d["nombre"] for d in ranking_actual if d["activo"]]
+
+        if ronda == 1 and not datos_t["resultados_rondas"].get("1", {}).get("mesas"):
+            random.shuffle(activos)
+
+        mesas_generadas, jugadores_bye = generar_ronda_completa(
+            activos, historial_parejas, conteo_byes
+        )
+
+        for m_datos in mesas_generadas.values():
+            historial_parejas.append(list(m_datos["pareja_A"]))
+            historial_parejas.append(list(m_datos["pareja_B"]))
+        for jb in jugadores_bye:
+            conteo_byes[jb] = conteo_byes.get(jb, 0) + 1
+
+        datos_t["historial_parejas"] = historial_parejas
+        datos_t["historial_byes"] = [
+            j for j, c in conteo_byes.items() for _ in range(c)
+        ]
+        datos_t["resultados_rondas"][r_str]["mesas"] = mesas_generadas
+        datos_t["resultados_rondas"][r_str]["byes"] = jugadores_bye
+        guardar_estado_general(st.session_state.torneos)
+
+    mesas_guardadas = datos_t["resultados_rondas"][r_str]["mesas"]
+    jugadores_bye = datos_t["resultados_rondas"][r_str]["byes"]
+
+    st.subheader(f"Mesas de Juego - Ronda {ronda}")
+
+    for m_str_mesa, datos_mesa in mesas_guardadas.items():
+        pareja_a = datos_mesa["pareja_A"]
+        pareja_b = datos_mesa["pareja_B"]
+        mesa_num = m_str_mesa.split("_")[1]
+
+        with st.expander(
+            f"MESA {mesa_num}: Pareja A ({pareja_a[0]} - {pareja_a[1]}) vs Pareja B ({pareja_b[0]} - {pareja_b[1]})",
+            expanded=True,
+        ):
+            col_pA, col_pB = st.columns(2)
+            with col_pA:
+                st.markdown(f"**Pareja A:** {pareja_a[0]} y {pareja_a[1]}")
+                pts_a = st.number_input(
+                    f"Puntos Pareja A (Mesa {mesa_num})",
+                    min_value=0,
+                    max_value=datos_t["meta"],
+                    value=int(datos_mesa.get("pts_A", 0)),
+                    key=f"pts_A_{t_actual}_{ronda}_{m_str_mesa}",
+                )
+            with col_pB:
+                st.markdown(f"**Pareja B:** {pareja_b[0]} y {pareja_b[1]}")
+                pts_b = st.number_input(
+                    f"Puntos Pareja B (Mesa {mesa_num})",
+                    min_value=0,
+                    max_value=datos_t["meta"],
+                    value=int(datos_mesa.get("pts_B", 0)),
+                    key=f"pts_B_{t_actual}_{ronda}_{m_str_mesa}",
+                )
+
+            if datos_mesa["pts_A"] != pts_a or datos_mesa["pts_B"] != pts_b:
+                datos_mesa["pts_A"] = pts_a
+                datos_mesa["pts_B"] = pts_b
+                guardar_estado_general(st.session_state.torneos)
+
+    if jugadores_bye:
+        meta = datos_t["meta"]
+        for idx_b, jb in enumerate(jugadores_bye):
+            st.info(
+                f"Jugador libre (Bye) #{idx_b + 1}: {jb} — Gana automático {meta} a {meta // 2}."
+            )
+
+    st.markdown("---")
+    col_ant, col_sig = st.columns(2)
+
+    with col_ant:
+        if ronda > 1:
+            if st.button("Ir a la ronda anterior", use_container_width=True):
+                datos_t["ronda_actual"] -= 1
+                guardar_estado_general(st.session_state.torneos)
+                st.rerun()
+
+    with col_sig:
+        if ronda < datos_t["rondas"]:
+            if st.button("Ir a la siguiente ronda", use_container_width=True):
+                datos_t["ronda_actual"] += 1
+                guardar_estado_general(st.session_state.torneos)
+                st.rerun()
+        else:
+            if st.button(
+                "GENERAR RANKING FINAL", type="primary", use_container_width=True
+            ):
+                datos_t["estado_torneo"] = "finalizado"
+                guardar_estado_general(st.session_state.torneos)
+                st.session_state.vista = "finalizado"
+                st.rerun()
+
+
+elif st.session_state.vista == "finalizado":
+    t_actual = st.session_state.torneo_actual
+    datos_t = st.session_state.torneos[t_actual]
+    st.balloons()
+
+    st.title(f"{t_actual} — Resultados Finales")
+    st.caption(
+        f"Modalidad: {datos_t['modalidad']} | Meta: {datos_t['meta']} pts"
+    )
+
+    ranking_final = calcular_ranking(datos_t)
+
+    st.markdown("### Podio de Campeones")
+    col_med1, col_med2, col_med3 = st.columns(3)
+
+    if len(ranking_final) >= 1:
+        with col_med1:
+            st.metric(
+                "🥇 PRIMER LUGAR",
+                ranking_final[0]["nombre"],
+                f"{ranking_final[0]['JG']} JG | Dif: {ranking_final[0]['DIF']}",
+            )
+    if len(ranking_final) >= 2:
+        with col_med2:
+            st.metric(
+                "🥈 SEGUNDO LUGAR",
+                ranking_final[1]["nombre"],
+                f"{ranking_final[1]['JG']} JG | Dif: {ranking_final[1]['DIF']}",
+            )
+    if len(ranking_final) >= 3:
+        with col_med3:
+            st.metric(
+                "🥉 TERCER LUGAR",
+                ranking_final[2]["nombre"],
+                f"{ranking_final[2]['JG']} JG | Dif: {ranking_final[2]['DIF']}",
+            )
+
+    st.markdown("---")
+    st.markdown("### Clasificación General")
+    st.dataframe(ranking_final, use_container_width=True)
+
+    col_btn_volver, col_btn_inicio = st.columns(2)
+    with col_btn_volver:
+        if st.button(
+            "⬅️ Volver a Rondas para Corregir", use_container_width=True
+        ):
+            datos_t["estado_torneo"] = "rondas"
+            datos_t["ronda_actual"] = datos_t["rondas"]
+            guardar_estado_general(st.session_state.torneos)
+            st.session_state.vista = "rondas"
+            st.rerun()
+
+    with col_btn_inicio:
+        if st.button(
+            "Volver al Menú Principal", type="primary", use_container_width=True
+        ):
+            st.session_state.vista = "puerta"
+            st.rerun()
+
+
+elif st.session_state.vista == "lista_torneos":
+    st.title("Torneos Guardados")
+    if st.button("⬅ Volver al Inicio"):
+        st.session_state.torneo_a_eliminar = None
+        st.session_state.vista = "puerta"
+        st.rerun()
+
+    if not st.session_state.torneos:
+        st.info("Aún no hay torneos creados.")
+    else:
+        for nombre, info in list(st.session_state.torneos.items()):
+            col_abrir, col_borrar = st.columns([4, 1])
+            etiqueta = f"📂 {nombre} ({info['modalidad']} - {info['meta']} pts - {info['rondas']} rondas)"
+            with col_abrir:
+                if st.button(etiqueta, key=f"abrir_{nombre}", use_container_width=True):
+                    st.session_state.torneo_actual = nombre
+                    st.session_state.vista = info.get(
+                        "estado_torneo", "inscribir_atletas"
+                    )
+                    st.rerun()
+            with col_borrar:
+                if st.button(
+                    "🗑️ Eliminar Torneo",
+                    key=f"req_del_{nombre}",
+                    use_container_width=True,
+                ):
+                    st.session_state.torneo_a_eliminar = nombre
+                    st.rerun()
+
+        if st.session_state.torneo_a_eliminar:
+            t_del = st.session_state.torneo_a_eliminar
+            st.markdown("---")
+            st.warning(
+                f"⚠️ **AVISO DE SEGURIDAD:** Está a punto de eliminar el torneo **'{t_del}'**. Introduzca su clave."
+            )
+            clave_confirm = st.text_input(
+                "Clave de autorización:", type="password", key="clave_borrar_torneo"
+            )
+
+            c_conf, c_canc = st.columns(2)
+            with c_conf:
+                if st.button(
+                    "Confirmar Eliminación",
+                    type="primary",
+                    use_container_width=True,
+                ):
+                    if clave_confirm == CLAVE_ACCESO:
+                        del st.session_state.torneos[t_del]
+                        guardar_estado_general(st.session_state.torneos)
+                        if st.session_state.torneo_actual == t_del:
+                            st.session_state.torneo_actual = None
+                        st.session_state.torneo_a_eliminar = None
+                        st.success(f"Torneo '{t_del}' eliminado correctamente.")
+                        st.rerun()
+                    else:
+                        st.error("Clave incorrecta. No se eliminó el torneo.")
+            with c_canc:
+                if st.button("Cancelar", use_container_width=True):
+                    st.session_state.torneo_a_eliminar = None
+                    st.rerun()
