@@ -291,4 +291,187 @@ elif st.session_state.vista == "elegir_modalidad":
 # -----------------------------------------------------------------------------
 elif st.session_state.vista == "crear_torneo":
     mod = st.session_state.modalidad_temp
-    st.title(f"Nuevo
+    st.title(f"Nuevo Torneo ({mod})")
+    if st.button("⬅ Cambiar Modalidad"):
+        st.session_state.vista = "elegir_modalidad"
+        st.rerun()
+
+    with st.form("form_nuevo_torneo"):
+        nombre_torneo = st.text_input("Nombre del Torneo:")
+        col_m, col_r = st.columns(2)
+        with col_m:
+            meta_puntos = st.selectbox("Marcador de Meta:", [100, 200], index=1)
+        with col_r:
+            cant_rondas = st.selectbox("Cantidad de Rondas:", [6, 7, 8, 9], index=1)
+
+        if st.form_submit_button("Crear y Pasar a Inscripción", type="primary"):
+            n_t = nombre_torneo.strip()
+            if not n_t:
+                st.warning("Debe escribir un nombre para el torneo.")
+            elif n_t.lower() in [k.lower() for k in st.session_state.torneos.keys()]:
+                st.error(f"Ya existe un torneo llamado '{n_t}'.")
+            else:
+                st.session_state.torneos[n_t] = {
+                    "modalidad": mod,
+                    "meta": meta_puntos,
+                    "rondas": cant_rondas,
+                    "atletas": [],
+                    "retirados": [],
+                    "ronda_actual": 1,
+                    "amonestaciones": {},
+                    "historial_byes": [],
+                    "historial_parejas": [],
+                    "resultados_rondas": {},
+                    "estado_torneo": "inscribir_atletas",
+                }
+                guardar_estado_general(st.session_state.torneos)
+                st.session_state.torneo_actual = n_t
+                st.session_state.vista = "inscribir_atletas"
+                st.rerun()
+
+
+# -----------------------------------------------------------------------------
+# 9. INSCRIPCION DE ATLETAS
+# -----------------------------------------------------------------------------
+elif st.session_state.vista == "inscribir_atletas":
+    t_actual = st.session_state.torneo_actual
+    datos_t = st.session_state.torneos[t_actual]
+
+    st.title(f"{t_actual}")
+    st.caption(
+        f"Modalidad: {datos_t['modalidad']} | Meta: {datos_t['meta']} pts | Rondas: {datos_t['rondas']}"
+    )
+
+    if st.button("⬅ Volver al Inicio"):
+        st.session_state.vista = "puerta"
+        st.rerun()
+
+    st.markdown("### Inscripción de Atletas")
+
+    with st.form("form_agregar_atleta", clear_on_submit=True):
+        nuevo_atleta = st.text_input("Nombre del Atleta:")
+        if st.form_submit_button("Agregar Atleta"):
+            n_a = nuevo_atleta.strip()
+            lista_actual = datos_t["atletas"]
+            if not n_a:
+                st.warning("Ingrese un nombre válido.")
+            elif n_a.lower() in [x.lower() for x in lista_actual]:
+                st.error(f"El atleta '{n_a}' ya está inscrito.")
+            else:
+                lista_actual.append(n_a)
+                lista_actual.sort(key=lambda x: x.lower())
+                guardar_estado_general(st.session_state.torneos)
+                st.success(f"Atleta '{n_a}' agregado.")
+                st.rerun()
+
+    atletas = datos_t["atletas"]
+    st.markdown(f"**Atletas Inscritos ({len(atletas)}):**")
+
+    indices_a_eliminar = []
+    for idx, atleta in enumerate(atletas):
+        c1, c2 = st.columns([6, 1])
+        c1.write(f"**{idx + 1}.** {atleta}")
+        if c2.button("Eliminar", key=f"del_{idx}"):
+            indices_a_eliminar.append(idx)
+
+    if indices_a_eliminar:
+        for idx in reversed(indices_a_eliminar):
+            atletas.pop(idx)
+        guardar_estado_general(st.session_state.torneos)
+        st.rerun()
+
+    st.markdown("---")
+    if st.button("Comenzar el torneo", type="primary", use_container_width=True):
+        if len(atletas) < 4:
+            st.warning(
+                "Se requieren al menos 4 atletas inscritos para iniciar el torneo."
+            )
+        else:
+            datos_t["estado_torneo"] = "rondas"
+            datos_t["ronda_actual"] = 1
+            datos_t["resultados_rondas"] = {}
+            datos_t["historial_parejas"] = []
+            datos_t["historial_byes"] = []
+            guardar_estado_general(st.session_state.torneos)
+            st.session_state.vista = "rondas"
+            st.rerun()
+
+
+# -----------------------------------------------------------------------------
+# 10. RONDAS Y EMPAREJAMIENTO
+# -----------------------------------------------------------------------------
+elif st.session_state.vista == "rondas":
+    t_actual = st.session_state.torneo_actual
+    datos_t = st.session_state.torneos[t_actual]
+
+    datos_t.setdefault("resultados_rondas", {})
+    datos_t.setdefault("historial_byes", [])
+    datos_t.setdefault("historial_parejas", [])
+    datos_t.setdefault("retirados", [])
+    datos_t.setdefault("amonestaciones", {})
+    datos_t.setdefault("ronda_actual", 1)
+
+    ronda = datos_t["ronda_actual"]
+    r_str = str(ronda)
+
+    st.title(f"{t_actual} ({datos_t['modalidad']})")
+    st.subheader(f"Ronda {ronda} de {datos_t['rondas']}")
+
+    col_ini, col_rank, col_ret, col_amon = st.columns([2, 2, 2, 2])
+
+    with col_ini:
+        if st.button("⬅ Menú Principal", use_container_width=True):
+            st.session_state.vista = "puerta"
+            st.rerun()
+
+    with col_rank:
+        if st.button("Ver Ranking", use_container_width=True):
+            st.session_state.ver_ranking = not st.session_state.get(
+                "ver_ranking", False
+            )
+
+    with col_ret:
+        if st.button("Retirados", use_container_width=True):
+            st.session_state.ver_ret = not st.session_state.get("ver_ret", False)
+
+    with col_amon:
+        if st.button("Amonestaciones", use_container_width=True):
+            st.session_state.ver_amon = not st.session_state.get("ver_amon", False)
+
+    if st.session_state.get("ver_ranking", False):
+        st.markdown("### Tabla de Posiciones Acumulada")
+        st.dataframe(calcular_ranking(datos_t), use_container_width=True)
+
+    if st.session_state.get("ver_ret", False):
+        st.markdown("### Gestión de Atletas Retirados")
+        j_ret_sel = st.selectbox("Seleccione Atleta:", datos_t["atletas"])
+        col_ret_norm, col_ret_exp = st.columns(2)
+
+        with col_ret_norm:
+            if st.button("Retiro Normal (Fin de Ronda)", use_container_width=True):
+                if j_ret_sel not in datos_t["retirados"]:
+                    datos_t["retirados"].append(j_ret_sel)
+                    guardar_estado_general(st.session_state.torneos)
+                    st.success(f"{j_ret_sel} retirado respetando su puntaje.")
+                    st.rerun()
+
+        with col_ret_exp:
+            if st.button("Expulsión (Forfeit 0-Meta)", use_container_width=True):
+                if j_ret_sel not in datos_t["retirados"]:
+                    datos_t["retirados"].append(j_ret_sel)
+                    meta = datos_t["meta"]
+                    if (
+                        r_str in datos_t["resultados_rondas"]
+                        and "mesas" in datos_t["resultados_rondas"][r_str]
+                    ):
+                        for d_m in datos_t["resultados_rondas"][r_str][
+                            "mesas"
+                        ].values():
+                            if j_ret_sel in d_m["pareja_A"]:
+                                d_m["pts_A"] = 0
+                                d_m["pts_B"] = meta
+                            elif j_ret_sel in d_m["pareja_B"]:
+                                d_m["pts_A"] = meta
+                                d_m["pts_B"] = 0
+                    guardar_estado_general(st.session_state.torneos)
+                    st.
