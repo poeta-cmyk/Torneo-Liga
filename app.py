@@ -41,43 +41,52 @@ def seleccionar_byes_equitativos(jugadores_ordenados, conteo_byes, cantidad_byes
     return [nombre for _, nombre in candidatos[:cantidad_byes]]
 
 
-def emparejar_por_ranking(en_juego, usadas):
+def emparejar_por_ranking(en_juego, usadas_previas):
+    """Arma parejas siguiendo estrictamente 1 con 3 (0 con 2) y 2 con 4 (1 con 3)."""
     disponibles = list(en_juego)
     parejas = []
+    usadas = set(usadas_previas)
 
     while len(disponibles) >= 4:
         bloque = disponibles[:4]
         disponibles = disponibles[4:]
 
-        candidatos_pares = [
-            (bloque[0], bloque[2]),
-            (bloque[1], bloque[3]),
-            (bloque[0], bloque[1]),
-            (bloque[2], bloque[3]),
-            (bloque[0], bloque[3]),
-            (bloque[1], bloque[2]),
-        ]
+        par_1_3 = [bloque[0], bloque[2]]
+        par_2_4 = [bloque[1], bloque[3]]
 
-        usados_en_bloque = set()
-        pares_bloque = []
-        for a, b in candidatos_pares:
-            if a in usados_en_bloque or b in usados_en_bloque:
-                continue
-            clave = normalizar_par(a, b)
-            if clave not in usadas:
-                pares_bloque.append([a, b])
-                usados.add(clave)
-                usados_en_bloque.update([a, b])
-            if len(pares_bloque) == 2:
+        c_1_3 = normalizar_par(par_1_3[0], par_1_3[1])
+        c_2_4 = normalizar_par(par_2_4[0], par_2_4[1])
+
+        if c_1_3 not in usadas and c_2_4 not in usadas:
+            parejas.append(par_1_3)
+            parejas.append(par_2_4)
+            usadas.add(c_1_3)
+            usadas.add(c_2_4)
+            continue
+
+        alternativas = [
+            ([bloque[0], bloque[3]], [bloque[1], bloque[2]]),
+            ([bloque[0], bloque[1]], [bloque[2], bloque[3]]),
+        ]
+        elegida = None
+        for p_a, p_b in alternativas:
+            ca = normalizar_par(p_a[0], p_a[1])
+            cb = normalizar_par(p_b[0], p_b[1])
+            if ca not in usadas and cb not in usadas:
+                elegida = (p_a, p_b, ca, cb)
                 break
 
-        if len(pares_bloque) < 2:
-            pares_bloque = [
-                [bloque[0], bloque[2]],
-                [bloque[1], bloque[3]],
-            ]
-
-        parejas.extend(pares_bloque)
+        if elegida is not None:
+            p_a, p_b, ca, cb = elegida
+            parejas.append(p_a)
+            parejas.append(p_b)
+            usadas.add(ca)
+            usadas.add(cb)
+        else:
+            parejas.append(par_1_3)
+            parejas.append(par_2_4)
+            usadas.add(c_1_3)
+            usadas.add(c_2_4)
 
     return parejas
 
