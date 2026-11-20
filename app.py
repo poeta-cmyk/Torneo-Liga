@@ -1,5 +1,6 @@
 import json
 import os
+import random
 import streamlit as st
 
 st.set_page_config(
@@ -317,9 +318,7 @@ elif st.session_state.vista == "crear_torneo":
         with col_m:
             meta_puntos = st.selectbox("Marcador de Meta:", [100, 200], index=1)
         with col_r:
-            cant_rondas = st.selectbox(
-                "Cantidad de Rondas:", [3, 4, 5, 6, 7, 8, 9, 10], index=4
-            )
+            cant_rondas = st.selectbox("Cantidad de Rondas:", [6, 7, 8, 9], index=1)
 
         if st.form_submit_button("Crear y Pasar a Inscripción", type="primary"):
             n_t = nombre_torneo.strip()
@@ -523,6 +522,10 @@ elif st.session_state.vista == "rondas":
         historial_parejas, conteo_byes = reconstruir_historiales(datos_t)
         ranking_actual = calcular_ranking(datos_t)
         activos = [d["nombre"] for d in ranking_actual if d["activo"]]
+
+        # En Ronda 1 (sin resultados previos), baraja al azar en vez de seguir el orden alfabético
+        if ronda == 1 and not datos_t["resultados_rondas"].get("1", {}).get("mesas"):
+            random.shuffle(activos)
 
         mesas_generadas, jugadores_bye = generar_ronda_completa(
             activos, historial_parejas, conteo_byes
