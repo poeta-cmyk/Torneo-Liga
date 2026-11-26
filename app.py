@@ -444,25 +444,30 @@ elif st.session_state.vista == "ronda":
     render_botones_gestion(datos_t, r_str, f"bot_r{ronda}")
 
     st.markdown("---")
+    sig_ronda = ronda + 1
     if ronda == 1:
-        if st.button("IR A LA SIGUIENTE RONDA", type="primary", use_container_width=True):
-            sig_ronda = 2
-            sig_str = "2"
-            if sig_str not in datos_t["resultados_rondas"]:
-                mesas_2, byes_2 = crear_ronda_por_orden(datos_t)
+        if ronda < datos_t["rondas"]:
+            if st.button(
+                f"GENERAR RONDA {sig_ronda}",
+                type="primary",
+                key=f"gen_r{sig_ronda}_desde_r{ronda}",
+                use_container_width=True,
+            ):
+                sig_str = str(sig_ronda)
+                mesas_n, byes_n = crear_ronda_por_orden(datos_t)
                 datos_t["resultados_rondas"][sig_str] = {
-                    "mesas": mesas_2,
-                    "byes": byes_2,
+                    "mesas": mesas_n,
+                    "byes": byes_n,
                 }
-            datos_t["ronda_actual"] = sig_ronda
-            guardar_base_torneos(st.session_state.torneos)
-            st.rerun()
+                datos_t["ronda_actual"] = sig_ronda
+                guardar_base_torneos(st.session_state.torneos)
+                st.rerun()
     else:
         col_ant, col_sig = st.columns(2)
         with col_ant:
             if st.button(
-                "VOLVER A LA RONDA ANTERIOR",
-                key=f"btn_ant_r{ronda}",
+                f"VOLVER A LA RONDA {ronda - 1}",
+                key=f"volver_r{ronda - 1}_desde_r{ronda}",
                 use_container_width=True,
             ):
                 datos_t["ronda_actual"] = ronda - 1
@@ -471,19 +476,17 @@ elif st.session_state.vista == "ronda":
         with col_sig:
             if ronda < datos_t["rondas"]:
                 if st.button(
-                    "IR A LA SIGUIENTE RONDA",
+                    f"GENERAR RONDA {sig_ronda}",
                     type="primary",
-                    key=f"btn_sig_r{ronda}",
+                    key=f"gen_r{sig_ronda}_desde_r{ronda}",
                     use_container_width=True,
                 ):
-                    sig_ronda = ronda + 1
                     sig_str = str(sig_ronda)
-                    if sig_str not in datos_t["resultados_rondas"]:
-                        mesas_n, byes_n = crear_ronda_por_orden(datos_t)
-                        datos_t["resultados_rondas"][sig_str] = {
-                            "mesas": mesas_n,
-                            "byes": byes_n,
-                        }
+                    mesas_n, byes_n = crear_ronda_por_orden(datos_t)
+                    datos_t["resultados_rondas"][sig_str] = {
+                        "mesas": mesas_n,
+                        "byes": byes_n,
+                    }
                     datos_t["ronda_actual"] = sig_ronda
                     guardar_base_torneos(st.session_state.torneos)
                     st.rerun()
