@@ -98,7 +98,7 @@ elif st.session_state.vista == "nuevo_torneo":
         with col_r:
             cant_rondas = st.selectbox("Cantidad de Rondas:", [6, 7, 8, 9], index=1)
 
-        if st.form_submit_button("Guardar Torneo", type="primary"):
+        if st.form_submit_button("INICIAR TORNEO", type="primary"):
             n_t = nombre_torneo.strip()
             if not n_t:
                 st.warning("Debe escribir un nombre para el torneo.")
