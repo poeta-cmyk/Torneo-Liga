@@ -1,5 +1,6 @@
 import json
 import os
+import random
 import streamlit as st
 
 st.set_page_config(
@@ -30,7 +31,32 @@ def guardar_base_torneos(torneos):
 
 
 # -----------------------------------------------------------------------------
-# 2. ESTADO DE SESION
+# 2. GENERACION DE PRIMERA RONDA (AL AZAR)
+# -----------------------------------------------------------------------------
+def crear_primera_ronda_azar(atletas):
+    mezclados = list(atletas)
+    random.shuffle(mezclados)
+
+    residuo = len(mezclados) % 4
+    byes = mezclados[:residuo] if residuo > 0 else []
+    en_juego = mezclados[residuo:]
+
+    mesas = {}
+    num_mesas = len(en_juego) // 4
+    for m_idx in range(num_mesas):
+        base = 4 * m_idx
+        mesas[f"mesa_{m_idx + 1}"] = {
+            "pareja_A": [en_juego[base], en_juego[base + 2]],
+            "pareja_B": [en_juego[base + 1], en_juego[base + 3]],
+            "pts_A": 0,
+            "pts_B": 0,
+        }
+
+    return mesas, byes
+
+
+# -----------------------------------------------------------------------------
+# 3. ESTADO DE SESION
 # -----------------------------------------------------------------------------
 if "autenticado" not in st.session_state:
     st.session_state.autenticado = False
@@ -45,7 +71,7 @@ if "torneo_a_eliminar" not in st.session_state:
 
 
 # -----------------------------------------------------------------------------
-# 3. ACCESO POR CLAVE
+# 4. ACCESO POR CLAVE
 # -----------------------------------------------------------------------------
 if not st.session_state.autenticado:
     st.title("Torneo Liga")
@@ -62,7 +88,7 @@ if not st.session_state.autenticado:
 
 
 # -----------------------------------------------------------------------------
-# 4. MENU PRINCIPAL
+# 5. MENU PRINCIPAL
 # -----------------------------------------------------------------------------
 if st.session_state.vista == "puerta":
     st.title("Torneo Liga")
@@ -82,7 +108,7 @@ if st.session_state.vista == "puerta":
 
 
 # -----------------------------------------------------------------------------
-# 5. CREAR NUEVO TORNEO
+# 6. CREAR NUEVO TORNEO
 # -----------------------------------------------------------------------------
 elif st.session_state.vista == "nuevo_torneo":
     st.title("Nuevo Torneo")
@@ -120,7 +146,7 @@ elif st.session_state.vista == "nuevo_torneo":
 
 
 # -----------------------------------------------------------------------------
-# 6. INSCRIPCION DE ATLETAS (ORDEN ALFABETICO)
+# 7. INSCRIPCION DE ATLETAS (ORDEN ALFABETICO)
 # -----------------------------------------------------------------------------
 elif st.session_state.vista == "inscribir_atletas":
     t_actual = st.session_state.torneo_actual
@@ -156,9 +182,54 @@ elif st.session_state.vista == "inscribir_atletas":
     for idx, atleta in enumerate(atletas):
         st.write(f"**{idx + 1}.** {atleta}")
 
+    if len(atletas) >= 4:
+        st.markdown("---")
+        if st.button("GENERAR PRIMERA RONDA", type="primary", use_container_width=True):
+            mesas, byes = crear_primera_ronda_azar(atletas)
+            datos_t["ronda_actual"] = 1
+            datos_t["resultados_rondas"]["1"] = {
+                "mesas": mesas,
+                "byes": byes,
+            }
+            guardar_base_torneos(st.session_state.torneos)
+            st.session_state.vista = "ronda_1"
+            st.rerun()
+
 
 # -----------------------------------------------------------------------------
-# 7. BASE DE DATOS DE TORNEOS GUARDADOS
+# 8. PRIMERA RONDA
+# -----------------------------------------------------------------------------
+elif st.session_state.vista == "ronda_1":
+    t_actual = st.session_state.torneo_actual
+    datos_t = st.session_state.torneos[t_actual]
+    ronda_1 = datos_t.get("resultados_rondas", {}).get("1", {})
+    mesas = ronda_1.get("mesas", {})
+    byes = ronda_1.get("byes", [])
+
+    st.title(f"{t_actual} — Ronda 1")
+    st.caption(f"Meta: {datos_t['meta']} pts | Rondas: {datos_t['rondas']}")
+
+    if st.button("⬅ Volver al Inicio"):
+        st.session_state.vista = "puerta"
+        st.rerun()
+
+    st.markdown("### Mesas de Juego - Ronda 1")
+    for m_key, m_data in mesas.items():
+        num_mesa = m_key.split("_")[1]
+        p_a = m_data["pareja_A"]
+        p_b = m_data["pareja_B"]
+        st.write(
+            f"**Mesa {num_mesa}:** {p_a[0]} y {p_a[1]}  vs  {p_b[0]} y {p_b[1]}"
+        )
+
+    if byes:
+        st.markdown("### Descansos (Bye)")
+        for jb in byes:
+            st.info(f"Jugador libre (Bye): {jb}")
+
+
+# -----------------------------------------------------------------------------
+# 9. BASE DE DATOS DE TORNEOS GUARDADOS
 # -----------------------------------------------------------------------------
 elif st.session_state.vista == "lista_torneos":
     st.title("Torneos Guardados")
@@ -179,7 +250,10 @@ elif st.session_state.vista == "lista_torneos":
             with col_abrir:
                 if st.button(etiqueta, key=f"abrir_{nombre}", use_container_width=True):
                     st.session_state.torneo_actual = nombre
-                    st.session_state.vista = "inscribir_atletas"
+                    if "1" in info.get("resultados_rondas", {}):
+                        st.session_state.vista = "ronda_1"
+                    else:
+                        st.session_state.vista = "inscribir_atletas"
                     st.rerun()
             with col_borrar:
                 if st.button(
