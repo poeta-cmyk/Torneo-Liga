@@ -441,9 +441,6 @@ elif st.session_state.vista == "ronda":
             st.info(f"Jugador libre (Bye): {jb}")
 
     st.markdown("---")
-    render_botones_gestion(datos_t, r_str, f"bot_r{ronda}")
-
-    st.markdown("---")
     sig_ronda = ronda + 1
     if ronda == 1:
         if ronda < datos_t["rondas"]:
@@ -498,63 +495,4 @@ elif st.session_state.vista == "ronda":
 elif st.session_state.vista == "lista_torneos":
     st.title("Torneos Guardados")
     if st.button("⬅ Volver al Inicio"):
-        st.session_state.torneo_a_eliminar = None
-        st.session_state.vista = "puerta"
-        st.rerun()
-
-    if not st.session_state.torneos:
-        st.info("Aún no hay torneos registrados en la base de datos.")
-    else:
-        for nombre, info in list(st.session_state.torneos.items()):
-            col_abrir, col_borrar = st.columns([4, 1])
-            etiqueta = (
-                f"📂 {nombre} — Meta: {info['meta']} pts | Rondas: {info['rondas']} | "
-                f"Atletas: {len(info.get('atletas', []))}"
-            )
-            with col_abrir:
-                if st.button(etiqueta, key=f"abrir_{nombre}", use_container_width=True):
-                    st.session_state.torneo_actual = nombre
-                    if info.get("resultados_rondas"):
-                        st.session_state.vista = "ronda"
-                    else:
-                        st.session_state.vista = "inscribir_atletas"
-                    st.rerun()
-            with col_borrar:
-                if st.button(
-                    "🗑️ Eliminar",
-                    key=f"req_del_{nombre}",
-                    use_container_width=True,
-                ):
-                    st.session_state.torneo_a_eliminar = nombre
-                    st.rerun()
-
-        if st.session_state.torneo_a_eliminar:
-            t_del = st.session_state.torneo_a_eliminar
-            st.markdown("---")
-            st.warning(
-                f"Está a punto de eliminar permanentemente el torneo **'{t_del}'**."
-            )
-            clave_confirm = st.text_input(
-                "Clave de autorización:", type="password", key="clave_borrar_torneo"
-            )
-            c_conf, c_canc = st.columns(2)
-            with c_conf:
-                if st.button(
-                    "Confirmar Eliminación",
-                    type="primary",
-                    use_container_width=True,
-                ):
-                    if clave_confirm == CLAVE_ACCESO:
-                        del st.session_state.torneos[t_del]
-                        guardar_base_torneos(st.session_state.torneos)
-                        if st.session_state.torneo_actual == t_del:
-                            st.session_state.torneo_actual = None
-                        st.session_state.torneo_a_eliminar = None
-                        st.success(f"Torneo '{t_del}' eliminado.")
-                        st.rerun()
-                    else:
-                        st.error("Clave incorrecta.")
-            with c_canc:
-                if st.button("Cancelar", use_container_width=True):
-                    st.session_state.torneo_a_eliminar = None
-                    st.rerun()
+        st.session_state
