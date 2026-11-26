@@ -197,17 +197,18 @@ elif st.session_state.vista == "inscribir_atletas":
 
 
 # -----------------------------------------------------------------------------
-# 8. PRIMERA RONDA
+# 8. PRIMERA RONDA CON ANOTADORES
 # -----------------------------------------------------------------------------
 elif st.session_state.vista == "ronda_1":
     t_actual = st.session_state.torneo_actual
     datos_t = st.session_state.torneos[t_actual]
+    meta = datos_t["meta"]
     ronda_1 = datos_t.get("resultados_rondas", {}).get("1", {})
     mesas = ronda_1.get("mesas", {})
     byes = ronda_1.get("byes", [])
 
     st.title(f"{t_actual} — Ronda 1")
-    st.caption(f"Meta: {datos_t['meta']} pts | Rondas: {datos_t['rondas']}")
+    st.caption(f"Meta: {meta} pts | Rondas: {datos_t['rondas']}")
 
     if st.button("⬅ Volver al Inicio"):
         st.session_state.vista = "puerta"
@@ -218,9 +219,33 @@ elif st.session_state.vista == "ronda_1":
         num_mesa = m_key.split("_")[1]
         p_a = m_data["pareja_A"]
         p_b = m_data["pareja_B"]
-        st.write(
-            f"**Mesa {num_mesa}:** {p_a[0]} y {p_a[1]}  vs  {p_b[0]} y {p_b[1]}"
-        )
+
+        with st.container(border=True):
+            st.markdown(
+                f"**Mesa {num_mesa}:** {p_a[0]} y {p_a[1]}  vs  {p_b[0]} y {p_b[1]}"
+            )
+            col_a, col_b = st.columns(2)
+            with col_a:
+                pts_a = st.number_input(
+                    f"Puntos Pareja A (Mesa {num_mesa})",
+                    min_value=0,
+                    max_value=meta,
+                    value=int(m_data.get("pts_A", 0)),
+                    key=f"r1_pts_A_{t_actual}_{m_key}",
+                )
+            with col_b:
+                pts_b = st.number_input(
+                    f"Puntos Pareja B (Mesa {num_mesa})",
+                    min_value=0,
+                    max_value=meta,
+                    value=int(m_data.get("pts_B", 0)),
+                    key=f"r1_pts_B_{t_actual}_{m_key}",
+                )
+
+            if m_data.get("pts_A") != pts_a or m_data.get("pts_B") != pts_b:
+                m_data["pts_A"] = pts_a
+                m_data["pts_B"] = pts_b
+                guardar_base_torneos(st.session_state.torneos)
 
     if byes:
         st.markdown("### Descansos (Bye)")
